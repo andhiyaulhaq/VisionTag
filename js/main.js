@@ -154,6 +154,7 @@ class App {
                         this.saveAnnotations(oldData.currentImageIndex, oldData.annotations);
                     }
                     this.loadImage(data.currentImageIndex);
+                    this.updateImageSelection(data.currentImageIndex);
                 }
             }
 
@@ -616,6 +617,17 @@ class App {
         } catch (err) {
             console.error('Failed to save classes:', err);
         }
+    }
+
+    updateImageSelection(index) {
+        const items = this.dom.imageList.querySelectorAll('.image-item');
+        items.forEach((item, idx) => {
+            const isActive = idx === index;
+            item.classList.toggle('active', isActive);
+            if (isActive) {
+                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        });
     }
 
     updateClassSelection(selectedId) {
