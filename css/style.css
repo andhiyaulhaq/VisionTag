@@ -579,14 +579,23 @@ canvas {
 /* --- Crosshair --- */
 .crosshair {
     position: absolute;
-    background: var(--accent);
-    opacity: 0.5;
+    opacity: 0.6;
     pointer-events: none;
     z-index: 10;
 }
 
-#crosshair-v { width: 1px; height: 100%; top: 0; }
-#crosshair-h { height: 1px; width: 100%; left: 0; }
+#crosshair-v { 
+    width: 2px; 
+    height: 100%; 
+    top: 0; 
+    background: repeating-linear-gradient(to bottom, var(--accent), var(--accent) 8px, transparent 8px, transparent 14px);
+}
+#crosshair-h { 
+    height: 2px; 
+    width: 100%; 
+    left: 0; 
+    background: repeating-linear-gradient(to right, var(--accent), var(--accent) 8px, transparent 8px, transparent 14px);
+}
 
 .hidden { display: none !important; }
 
