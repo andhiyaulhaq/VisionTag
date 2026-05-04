@@ -74,10 +74,15 @@ export class CanvasEngine {
 
         if (e.button !== 0) return;
 
-        // 2. Interaction with existing boxes (Select / Move / Resize)
+        // 2. Interaction with existing boxes (Select / Move / Resize / Label Dropdown)
         const hit = this.hitTest(imgPos.x, imgPos.y);
 
         if (hit) {
+            if (hit.handle === 'label') {
+                this.showClassDropdown(hit.boxId, e.clientX, e.clientY);
+                return;
+            }
+
             state.set({ selectedBoxId: hit.boxId });
             this.interaction = {
                 type: hit.handle ? 'resize' : 'move',
@@ -142,9 +147,11 @@ export class CanvasEngine {
             // Hover check
             const hit = this.hitTest(imgPos.x, imgPos.y);
             state.set({ hoveredBoxId: hit ? hit.boxId : null });
-
+            
             if (hit) {
-                if (hit.handle) {
+                if (hit.handle === 'label') {
+                    this.canvas.style.cursor = 'pointer';
+                } else if (hit.handle) {
                     const cursorMap = {
                         nw: 'nwse-resize', se: 'nwse-resize',
                         ne: 'nesw-resize', sw: 'nesw-resize',
@@ -244,15 +251,30 @@ export class CanvasEngine {
     }
 
     hitTest(x, y) {
-        const handleSize = 8 / state.data.zoom;
+        const { annotations, classes, zoom, selectedBoxId } = state.data;
+        const handleSize = 8 / zoom;
         const halfSize = handleSize / 2;
 
         // Check in reverse order (top boxes first)
-        for (let i = state.data.annotations.length - 1; i >= 0; i--) {
-            const box = state.data.annotations[i];
+        for (let i = annotations.length - 1; i >= 0; i--) {
+            const box = annotations[i];
+            const cls = classes.find(c => c.id === box.classId);
 
-            // Check handles if selected
-            if (box.id === state.data.selectedBoxId) {
+            // 1. Check Label Hit (even if not selected)
+            const name = cls ? cls.name : 'Pending...';
+            const fontSize = 18 / zoom;
+            this.ctx.font = `600 ${fontSize}px 'Inter', system-ui, sans-serif`;
+            const padding = 6 / zoom;
+            const textWidth = this.ctx.measureText(name).width;
+            const bgWidth = textWidth + padding * 2;
+            const bgHeight = fontSize + padding * 2;
+
+            if (x >= box.x && x <= box.x + bgWidth && y >= box.y - bgHeight && y <= box.y) {
+                return { boxId: box.id, handle: 'label' };
+            }
+
+            // 2. Check handles if selected
+            if (box.id === selectedBoxId) {
                 const handles = {
                     nw: { x: box.x, y: box.y },
                     n: { x: box.x + box.width / 2, y: box.y },
@@ -271,7 +293,7 @@ export class CanvasEngine {
                 }
             }
 
-            // Check body
+            // 3. Check body
             if (x >= box.x && x <= box.x + box.width && y >= box.y && y <= box.y + box.height) {
                 return { boxId: box.id, handle: null };
             }
@@ -472,5 +494,46 @@ export class CanvasEngine {
 
         this.ctx.fillStyle = '#fff';
         this.ctx.fillText(name, box.x + padding, box.y - padding);
+    }
+
+    showClassDropdown(boxId, clientX, clientY) {
+        // Cleanup existing dropdown
+        const existing = document.getElementById('class-dropdown-overlay');
+        if (existing) existing.remove();
+
+        const dropdown = document.createElement('div');
+        dropdown.id = 'class-dropdown-overlay';
+        dropdown.className = 'class-dropdown';
+        dropdown.style.left = `${clientX}px`;
+        dropdown.style.top = `${clientY}px`;
+
+        state.data.classes.forEach(cls => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            item.innerHTML = `
+                <span class="color-dot" style="background: ${cls.color}"></span>
+                <span class="class-name">${cls.name}</span>
+            `;
+            item.onclick = (e) => {
+                e.stopPropagation();
+                const annotations = state.data.annotations.map(b => 
+                    b.id === boxId ? { ...b, classId: cls.id } : b
+                );
+                state.set({ annotations });
+                dropdown.remove();
+            };
+            dropdown.appendChild(item);
+        });
+
+        document.body.appendChild(dropdown);
+
+        // Close on click outside
+        const closeHandler = (e) => {
+            if (!dropdown.contains(e.target)) {
+                dropdown.remove();
+                window.removeEventListener('mousedown', closeHandler);
+            }
+        };
+        setTimeout(() => window.addEventListener('mousedown', closeHandler), 10);
     }
 }

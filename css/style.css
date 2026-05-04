@@ -30,6 +30,7 @@
     /* Typography */
     --font-main: 'Inter', system-ui, -apple-system, sans-serif;
     --font-heading: 'Outfit', var(--font-main);
+    --glass-border: rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -612,4 +613,49 @@ canvas {
 }
 ::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+}
+
+/* --- Class Dropdown --- */
+.class-dropdown {
+    position: fixed;
+    z-index: 1000;
+    background: rgba(22, 26, 33, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    min-width: 160px;
+    overflow: hidden;
+    animation: fadeInScale 0.15s ease-out;
+}
+
+@keyframes fadeInScale {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.dropdown-item {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.dropdown-item:hover {
+    background: var(--bg-hover);
+}
+
+.dropdown-item .color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.dropdown-item .class-name {
+    flex: 1;
 }
