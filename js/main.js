@@ -99,6 +99,20 @@ class App {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             
             const key = e.key.toLowerCase();
+            
+            // Undo / Redo
+            if (e.ctrlKey && key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) state.redo();
+                else state.undo();
+                return;
+            }
+            if (e.ctrlKey && key === 'y') {
+                e.preventDefault();
+                state.redo();
+                return;
+            }
+
             if (key === 'w') state.set({ mode: 'draw' });
             if (key === 'v') state.set({ mode: 'select' });
             if (key === 'd') this.nextImage();
@@ -119,6 +133,7 @@ class App {
         const { selectedBoxId, annotations } = state.data;
         if (!selectedBoxId) return;
 
+        state.saveHistory();
         state.set({
             annotations: annotations.filter(b => b.id !== selectedBoxId),
             selectedBoxId: null
@@ -196,6 +211,10 @@ class App {
 
             // 2. Auto-center and fit image on first load
             this.fitImageToCanvas(bitmap);
+
+            state.undoStack = [];
+            state.redoStack = [];
+            state.saveHistory(); // Initial state
 
             state.set({
                 currentImageBitmap: bitmap,

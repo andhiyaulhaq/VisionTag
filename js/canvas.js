@@ -57,6 +57,19 @@ export class CanvasEngine {
         this.container.addEventListener('click', (e) => {
             if (e.target === this.container) state.set({ selectedBoxId: null });
         });
+
+        // Spacebar Panning
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && e.target === document.body) {
+                e.preventDefault();
+                state.set({ isPanning: true });
+            }
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'Space') {
+                state.set({ isPanning: false });
+            }
+        });
     }
 
     onMouseDown(e) {
@@ -65,10 +78,11 @@ export class CanvasEngine {
 
         console.log(`🎨 Canvas Click at Image Coords: [${Math.round(imgPos.x)}, ${Math.round(imgPos.y)}]`);
 
-        // 1. Panning (Middle Click or Alt+Left)
-        if (e.button === 1 || (e.button === 0 && e.altKey)) {
-            state.set({ isPanning: true });
+        // 1. Panning (Middle Click, Alt+Left, or Spacebar)
+        if (e.button === 1 || (e.button === 0 && (e.altKey || state.data.isPanning))) {
+            this.interaction = { type: 'pan' };
             this.lastMousePos = { x: e.clientX, y: e.clientY };
+            this.canvas.style.cursor = 'grabbing';
             return;
         }
 
@@ -113,6 +127,7 @@ export class CanvasEngine {
                 classId: -1
             };
 
+            state.saveHistory(); // Save state before adding new box
             state.set({
                 annotations: [...state.data.annotations, newBox],
                 selectedBoxId: newId
@@ -142,13 +157,22 @@ export class CanvasEngine {
 
         // Box Interaction
         if (this.interaction) {
+            if (this.interaction.type === 'pan') {
+                const dx = e.clientX - this.lastMousePos.x;
+                const dy = e.clientY - this.lastMousePos.y;
+                state.set({ pan: { x: state.data.pan.x + dx, y: state.data.pan.y + dy } });
+                this.lastMousePos = { x: e.clientX, y: e.clientY };
+                return;
+            }
             this.handleInteraction(imgPos);
         } else {
             // Hover check
             const hit = this.hitTest(imgPos.x, imgPos.y);
             state.set({ hoveredBoxId: hit ? hit.boxId : null });
             
-            if (hit) {
+            if (state.data.isPanning) {
+                this.canvas.style.cursor = 'grab';
+            } else if (hit) {
                 if (hit.handle === 'label') {
                     this.canvas.style.cursor = 'pointer';
                 } else if (hit.handle) {
@@ -171,22 +195,28 @@ export class CanvasEngine {
     }
 
     onMouseUp(e) {
-        if (this.interaction && this.interaction.type === 'draw') {
-            const { boxId } = this.interaction;
-            const box = state.data.annotations.find(b => b.id === boxId);
-            
-            if (box) {
-                // If classes exist, show dropdown. Otherwise, show "New Class" modal.
-                if (state.data.classes.length > 0) {
-                    this.showClassDropdown(boxId, e.clientX, e.clientY);
-                } else {
-                    window.dispatchEvent(new CustomEvent('request-new-class', { detail: { boxId } }));
+        if (this.interaction) {
+            if (this.interaction.type === 'move' || this.interaction.type === 'resize') {
+                state.saveHistory();
+            }
+
+            if (this.interaction.type === 'draw') {
+                const { boxId } = this.interaction;
+                const box = state.data.annotations.find(b => b.id === boxId);
+                
+                if (box) {
+                    // If classes exist, show dropdown. Otherwise, show "New Class" modal.
+                    if (state.data.classes.length > 0) {
+                        this.showClassDropdown(boxId, e.clientX, e.clientY);
+                    } else {
+                        window.dispatchEvent(new CustomEvent('request-new-class', { detail: { boxId } }));
+                    }
                 }
             }
         }
 
-        state.set({ isPanning: false });
         this.interaction = null;
+        this.canvas.style.cursor = state.data.isPanning ? 'grab' : 'default';
     }
 
     handleInteraction(imgPos) {
@@ -541,6 +571,14 @@ export class CanvasEngine {
             `;
             item.onclick = (e) => {
                 e.stopPropagation();
+                
+                const box = state.data.annotations.find(b => b.id === boxId);
+                // Only save history if we are REASSIGNING an existing label.
+                // If it's a new box (classId === -1), the "draw" start was already saved.
+                if (box && box.classId !== -1) {
+                    state.saveHistory();
+                }
+
                 const annotations = state.data.annotations.map(b => 
                     b.id === boxId ? { ...b, classId: cls.id } : b
                 );

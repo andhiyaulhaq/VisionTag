@@ -23,12 +23,50 @@ export class AppState {
             loading: false
         };
         
+        this.undoStack = [];
+        this.redoStack = [];
         this.listeners = [];
     }
 
     /**
+     * Snapshots current annotations for Undo/Redo
+     */
+    saveHistory() {
+        const snapshot = JSON.stringify(this.data.annotations);
+        // Only save if different from last
+        if (this.undoStack.length > 0 && this.undoStack[this.undoStack.length - 1] === snapshot) return;
+        
+        this.undoStack.push(snapshot);
+        if (this.undoStack.length > 50) this.undoStack.shift();
+        this.redoStack = []; // New action clears redo stack
+    }
+
+    undo() {
+        if (this.undoStack.length === 0) return;
+        
+        // Capture current state for redo
+        const currentState = JSON.stringify(this.data.annotations);
+        this.redoStack.push(currentState);
+        
+        const previousSnapshot = this.undoStack.pop();
+        const previous = JSON.parse(previousSnapshot);
+        this.set({ annotations: previous });
+    }
+
+    redo() {
+        if (this.redoStack.length === 0) return;
+        
+        // Capture current state for undo
+        const currentState = JSON.stringify(this.data.annotations);
+        this.undoStack.push(currentState);
+        
+        const nextSnapshot = this.redoStack.pop();
+        const next = JSON.parse(nextSnapshot);
+        this.set({ annotations: next });
+    }
+
+    /**
      * Subscribe to state changes
-     * @param {Function} callback 
      */
     subscribe(callback) {
         this.listeners.push(callback);
@@ -39,13 +77,10 @@ export class AppState {
 
     /**
      * Update state and notify listeners
-     * @param {Object} partialData 
      */
     set(partialData) {
         const oldState = { ...this.data };
         this.data = { ...this.data, ...partialData };
-        
-        // Notify if anything changed
         this.notify(oldState);
     }
 
