@@ -49,7 +49,7 @@ Unlike traditional annotation tools, VisionTag runs entirely in your browser whi
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/visiontag.git
+   git clone https://github.com/andhiyaulhaq/VisionTag.git
    cd visiontag
    ```
 2. Install dependencies:
