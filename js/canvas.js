@@ -9,7 +9,7 @@ export class CanvasEngine {
         this.canvas = document.getElementById(canvasId);
         this.ctx = this.canvas.getContext('2d', { alpha: false });
         this.container = document.getElementById('workspace');
-        
+
         this.setupCanvas();
         this.initEventListeners();
         this.startRenderLoop();
@@ -18,7 +18,7 @@ export class CanvasEngine {
     setupCanvas() {
         this.dpr = window.devicePixelRatio || 1;
         const rect = this.container.getBoundingClientRect();
-        
+
         // Logical dimensions
         this.logicalWidth = rect.width;
         this.logicalHeight = rect.height;
@@ -27,7 +27,7 @@ export class CanvasEngine {
         this.canvas.height = this.logicalHeight * this.dpr;
         this.canvas.style.width = `${this.logicalWidth}px`;
         this.canvas.style.height = `${this.logicalHeight}px`;
-        
+
         // Use setTransform to avoid cumulative scaling from multiple resize events
         this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
@@ -52,7 +52,7 @@ export class CanvasEngine {
         this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
         window.addEventListener('mousemove', (e) => this.onMouseMove(e));
         window.addEventListener('mouseup', (e) => this.onMouseUp(e));
-        
+
         // Deselect on click outside
         this.container.addEventListener('click', (e) => {
             if (e.target === this.container) state.set({ selectedBoxId: null });
@@ -76,7 +76,7 @@ export class CanvasEngine {
 
         // 2. Interaction with existing boxes (Select / Move / Resize)
         const hit = this.hitTest(imgPos.x, imgPos.y);
-        
+
         if (hit) {
             state.set({ selectedBoxId: hit.boxId });
             this.interaction = {
@@ -107,12 +107,12 @@ export class CanvasEngine {
                 height: 0,
                 classId: state.data.selectedClassId !== null ? state.data.selectedClassId : -1
             };
-            
+
             state.set({
                 annotations: [...state.data.annotations, newBox],
                 selectedBoxId: newId
             });
-            
+
             this.interaction = {
                 type: 'draw',
                 boxId: newId,
@@ -142,7 +142,7 @@ export class CanvasEngine {
             // Hover check
             const hit = this.hitTest(imgPos.x, imgPos.y);
             state.set({ hoveredBoxId: hit ? hit.boxId : null });
-            
+
             if (hit) {
                 if (hit.handle) {
                     const cursorMap = {
@@ -192,7 +192,7 @@ export class CanvasEngine {
             if (type === 'draw') {
                 const curX = Math.max(0, Math.min(imgPos.x, imgWidth));
                 const curY = Math.max(0, Math.min(imgPos.y, imgHeight));
-                
+
                 return {
                     ...box,
                     x: Math.min(startImgPos.x, curX),
@@ -246,22 +246,22 @@ export class CanvasEngine {
     hitTest(x, y) {
         const handleSize = 8 / state.data.zoom;
         const halfSize = handleSize / 2;
-        
+
         // Check in reverse order (top boxes first)
         for (let i = state.data.annotations.length - 1; i >= 0; i--) {
             const box = state.data.annotations[i];
-            
+
             // Check handles if selected
             if (box.id === state.data.selectedBoxId) {
                 const handles = {
                     nw: { x: box.x, y: box.y },
-                    n:  { x: box.x + box.width / 2, y: box.y },
+                    n: { x: box.x + box.width / 2, y: box.y },
                     ne: { x: box.x + box.width, y: box.y },
-                    e:  { x: box.x + box.width, y: box.y + box.height / 2 },
+                    e: { x: box.x + box.width, y: box.y + box.height / 2 },
                     se: { x: box.x + box.width, y: box.y + box.height },
-                    s:  { x: box.x + box.width / 2, y: box.y + box.height },
+                    s: { x: box.x + box.width / 2, y: box.y + box.height },
                     sw: { x: box.x, y: box.y + box.height },
-                    w:  { x: box.x, y: box.y + box.height / 2 }
+                    w: { x: box.x, y: box.y + box.height / 2 }
                 };
 
                 for (const [name, pos] of Object.entries(handles)) {
@@ -288,23 +288,23 @@ export class CanvasEngine {
         const zoomSpeed = 0.001;
         const delta = -e.deltaY;
         const factor = Math.pow(1.1, delta / 100); // Smooth exponential zoom
-        
+
         const newZoom = Math.min(Math.max(state.data.zoom * factor, 0.1), 20);
-        
+
         // Zoom towards mouse position
         const rect = this.canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        
+
         // Calculate the mouse position in "Image Space" before zoom
         const worldX = (mouseX - state.data.pan.x) / state.data.zoom;
         const worldY = (mouseY - state.data.pan.y) / state.data.zoom;
-        
+
         // Update pan to keep the mouse point stable
         const newPanX = mouseX - worldX * newZoom;
         const newPanY = mouseY - worldY * newZoom;
-        
-        state.set({ 
+
+        state.set({
             zoom: newZoom,
             pan: { x: newPanX, y: newPanY }
         });
@@ -314,16 +314,16 @@ export class CanvasEngine {
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
-        
+
         const vLine = document.getElementById('crosshair-v');
         const hLine = document.getElementById('crosshair-h');
-        
+
         if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
             vLine.classList.remove('hidden');
             hLine.classList.remove('hidden');
             vLine.style.left = `${x}px`;
             hLine.style.top = `${y}px`;
-            
+
             // Update coordinate display
             const imgCoord = this.screenToImage(x, y);
             document.getElementById('coord-display').textContent = `X: ${Math.round(imgCoord.x)}, Y: ${Math.round(imgCoord.y)}`;
@@ -353,26 +353,26 @@ export class CanvasEngine {
 
     draw() {
         const { zoom, pan, currentImageBitmap, annotations } = state.data;
-        
+
         // 1. Clear with Theme Background (using logical dimensions)
         this.ctx.fillStyle = '#0f1115';
         this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
-        
+
         // 2. Draw Subtle Grid
         this.drawGrid(zoom, pan);
-        
+
         this.ctx.save();
         this.ctx.translate(pan.x, pan.y);
         this.ctx.scale(zoom, zoom);
-        
+
         // 3. Draw Image
         if (currentImageBitmap) {
             this.ctx.drawImage(currentImageBitmap, 0, 0);
         }
-        
+
         // 4. Draw Annotations
         this.drawAnnotations(annotations);
-        
+
         this.ctx.restore();
     }
 
@@ -380,11 +380,11 @@ export class CanvasEngine {
         const gridSize = 32 * zoom;
         const offsetX = pan.x % gridSize;
         const offsetY = pan.y % gridSize;
-        
+
         this.ctx.beginPath();
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
         this.ctx.lineWidth = 1;
-        
+
         for (let x = offsetX; x < this.logicalWidth; x += gridSize) {
             this.ctx.moveTo(x, 0);
             this.ctx.lineTo(x, this.logicalHeight);
@@ -398,7 +398,7 @@ export class CanvasEngine {
 
     drawAnnotations(annotations) {
         const { selectedBoxId, hoveredBoxId, zoom, classes } = state.data;
-        
+
         annotations.forEach(box => {
             const isSelected = box.id === selectedBoxId;
             const isHovered = box.id === hoveredBoxId;
@@ -406,7 +406,7 @@ export class CanvasEngine {
             const color = cls ? cls.color : '#ffffff';
 
             this.ctx.save();
-            
+
             // 1. Draw Box Body (Subtle fill)
             this.ctx.fillStyle = isSelected ? `${color}33` : (isHovered ? `${color}11` : 'transparent');
             this.ctx.fillRect(box.x, box.y, box.width, box.height);
@@ -414,12 +414,12 @@ export class CanvasEngine {
             // 2. Draw Border
             this.ctx.strokeStyle = color;
             this.ctx.lineWidth = 2 / zoom;
-            
+
             if (isSelected) {
                 this.ctx.shadowBlur = 10 / zoom;
                 this.ctx.shadowColor = color;
             }
-            
+
             this.ctx.strokeRect(box.x, box.y, box.width, box.height);
 
             // 3. Draw Handles (only for selected)
@@ -453,16 +453,16 @@ export class CanvasEngine {
         ];
 
         handles.forEach(pos => {
-            this.ctx.fillRect(pos.x - size/2, pos.y - size/2, size, size);
-            this.ctx.strokeRect(pos.x - size/2, pos.y - size/2, size, size);
+            this.ctx.fillRect(pos.x - size / 2, pos.y - size / 2, size, size);
+            this.ctx.strokeRect(pos.x - size / 2, pos.y - size / 2, size, size);
         });
     }
 
     drawLabel(box, name, color) {
-        const fontSize = 12 / state.data.zoom;
-        this.ctx.font = `600 ${fontSize}px var(--font-main)`;
-        
-        const padding = 4 / state.data.zoom;
+        const fontSize = 18 / state.data.zoom;
+        this.ctx.font = `600 ${fontSize}px 'Inter', system-ui, sans-serif`;
+
+        const padding = 6 / state.data.zoom;
         const textWidth = this.ctx.measureText(name).width;
         const bgWidth = textWidth + padding * 2;
         const bgHeight = fontSize + padding * 2;
