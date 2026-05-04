@@ -114,6 +114,24 @@
                     </div>
                 </div>
 
+                <div class="sidebar-section ai-section">
+                    <div class="section-header">
+                        <h3>AI Assistant</h3>
+                        <span id="model-status-badge" class="badge status-idle">Idle</span>
+                    </div>
+                    <div class="ai-controls">
+                        <button id="btn-load-model" class="btn btn-outline btn-full">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                            Load Custom Model
+                        </button>
+                        <button id="btn-auto-label-all" class="btn btn-primary btn-full" disabled title="Load a model first">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4-4-4"/><path d="M3 3.41V21h11.81"/><path d="m13 15 4-4-4-4"/><path d="M3 13h14"/></svg>
+                            Auto-Label Dataset
+                        </button>
+                        <p id="ai-model-name" class="ai-info">Using Default: YOLOv8n</p>
+                    </div>
+                </div>
+
                 <div class="sidebar-section box-inspector">
                     <div class="section-header">
                         <h3>Annotations</h3>
@@ -164,6 +182,7 @@
             </div>
         </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
     <script type="module" src="./js/main.js"></script>
 </body>
 

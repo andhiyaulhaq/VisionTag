@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { CanvasEngine } from './canvas.js';
 import { YoloHelper } from './yolo.js';
+import { ai } from './ai.js';
 
 /**
  * VisionTag Main Entry Point
@@ -13,6 +14,9 @@ class App {
         this.initStateListeners();
         this.initClickLogger();
         this.initGlobalErrorHandling();
+        
+        // Load default model
+        ai.loadModel('./assets/model/yolov8n.onnx');
 
         console.log('🚀 VisionTag Initialized');
     }
@@ -67,7 +71,14 @@ class App {
             modalMessage: document.getElementById('modal-message'),
             modalInput: document.getElementById('modal-input'),
             modalConfirm: document.getElementById('modal-confirm'),
-            modalCancel: document.getElementById('modal-cancel')
+            modalCancel: document.getElementById('modal-cancel'),
+
+            // AI UI
+            btnLoadModel: document.getElementById('btn-load-model'),
+            btnAutoLabelAll: document.getElementById('btn-auto-label-all'),
+            modelStatusBadge: document.getElementById('model-status-badge'),
+            aiModelName: document.getElementById('ai-model-name'),
+            workspace: document.getElementById('workspace')
         };
     }
 
@@ -92,6 +103,10 @@ class App {
 
         // Class management
         this.dom.btnAddClass.addEventListener('click', () => this.handleAddClass());
+
+        // AI Controls
+        this.dom.btnLoadModel.addEventListener('click', () => this.handleLoadCustomModel());
+        this.dom.btnAutoLabelAll.addEventListener('click', () => this.handleAutoLabelDataset());
 
         // Keyboard shortcuts
         window.addEventListener('keydown', (e) => {
@@ -192,6 +207,16 @@ class App {
 
             if (data.loading !== oldData.loading) {
                 document.getElementById('loading-overlay').classList.toggle('hidden', !data.loading);
+            }
+
+            // AI UI Updates
+            if (data.modelStatus !== oldData.modelStatus) {
+                this.dom.modelStatusBadge.className = `badge status-${data.modelStatus}`;
+                this.dom.modelStatusBadge.textContent = data.modelStatus.toUpperCase();
+                this.dom.btnAutoLabelAll.disabled = data.modelStatus !== 'ready';
+            }
+            if (data.aiModel?.name !== oldData.aiModel?.name) {
+                this.dom.aiModelName.textContent = data.aiModel ? `Using: ${data.aiModel.name}` : 'No model loaded';
             }
         });
     }
@@ -323,12 +348,11 @@ class App {
         }
     }
 
-    async saveAnnotations(index, annotations) {
-        if (!state.data.labelFolderHandle || annotations.length === 0) return;
+    async saveAnnotations(index, annotations, bitmap = state.data.currentImageBitmap) {
+        if (!state.data.labelFolderHandle || annotations.length === 0 || !bitmap) return;
 
         const imgInfo = state.data.images[index];
         const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
-        const bitmap = state.data.currentImageBitmap;
 
         try {
             const content = annotations
@@ -711,6 +735,99 @@ class App {
 
             select.addEventListener('click', (e) => e.stopPropagation());
         });
+    }
+
+    handleLoadCustomModel() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.onnx';
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (file) ai.loadModel(file);
+        };
+        input.click();
+    }
+
+    async handleAutoLabelDataset() {
+        if (!state.data.folderHandle) {
+            this.updateStatus('❌ Open a folder first', true);
+            return;
+        }
+
+        const confirmMsg = "🤖 VISIONTAG AI: This will process the ENTIRE dataset using the current model. \n\nExisting annotations will be overwritten if AI finds new objects. Proceed?";
+        if (!confirm(confirmMsg)) return;
+
+        // Show progress overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'progress-overlay';
+        overlay.innerHTML = `
+            <div class="progress-container">
+                <h3>AI is labeling your dataset...</h3>
+                <div class="progress-bar"><div id="ai-progress-fill" class="progress-fill"></div></div>
+                <p id="ai-progress-text">0 / ${state.data.images.length} images</p>
+                <button id="btn-cancel-ai" class="btn btn-secondary" style="margin-top: 20px;">Cancel</button>
+            </div>
+        `;
+        this.dom.workspace.appendChild(overlay);
+
+        let cancelled = false;
+        overlay.querySelector('#btn-cancel-ai').onclick = () => { cancelled = true; };
+
+        const images = state.data.images;
+        const progressFill = overlay.querySelector('#ai-progress-fill');
+        const progressText = overlay.querySelector('#ai-progress-text');
+
+        state.set({ isAutoLabeling: true });
+
+        for (let i = 0; i < images.length; i++) {
+            if (cancelled) break;
+
+            const imgInfo = images[i];
+            progressText.textContent = `${i + 1} / ${images.length} : Processing ${imgInfo.name}...`;
+            progressFill.style.width = `${((i + 1) / images.length) * 100}%`;
+
+            try {
+                // 1. Load bitmap
+                const file = await imgInfo.handle.getFile();
+                const bitmap = await createImageBitmap(file);
+
+                // 2. Run Inference
+                const predictions = await ai.predict(bitmap);
+
+                // 3. Convert to YOLO format and Save
+                if (predictions.length > 0) {
+                    // Map AI classes to project classes
+                    const mappedPredictions = predictions.map(p => {
+                        const aiClassName = ai.cocoClasses[p.classId] || `class_${p.classId}`;
+                        // Find matching class in our project (case-insensitive)
+                        let projectClass = state.data.classes.find(c => c.name.toLowerCase() === aiClassName.toLowerCase());
+                        
+                        // If not found and it's the bundled model, maybe create it?
+                        // For now, if not found, we fallback to the first project class
+                        return {
+                            ...p,
+                            classId: projectClass ? projectClass.id : (state.data.classes[0]?.id || 0)
+                        };
+                    });
+
+                    await this.saveAnnotations(i, mappedPredictions, bitmap);
+                    imgInfo.status = 'labeled';
+                }
+            } catch (err) {
+                console.error(`Failed to auto-label ${imgInfo.name}:`, err);
+            }
+        }
+
+        overlay.remove();
+        state.set({ isAutoLabeling: false });
+        this.renderImageList(state.data.images);
+        
+        // Refresh current image if we labeled it
+        if (state.data.currentImageIndex !== -1) {
+            this.loadImage(state.data.currentImageIndex);
+        }
+        
+        this.updateStatus(cancelled ? '⚠️ AI Batch Cancelled' : '✅ AI Batch Complete');
     }
 
     updateStatus(msg, isError = false) {

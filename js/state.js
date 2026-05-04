@@ -16,11 +16,16 @@ export class AppState {
             hoveredBoxId: null,
             classes: [],
             selectedClassId: null,
-            mode: 'select', // 'select' | 'draw'
             zoom: 1.0,
             pan: { x: 0, y: 0 },
             isPanning: false,
-            loading: false
+            loading: false,
+
+            // AI State
+            aiModel: null, // { name, session }
+            isAutoLabeling: false,
+            autoLabelProgress: 0,
+            modelStatus: 'idle' // 'idle' | 'loading' | 'ready' | 'error'
         };
         
         this.undoStack = [];
