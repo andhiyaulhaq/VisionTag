@@ -230,16 +230,19 @@ class App {
             const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
             state.set({ loading: true, statusMessage: 'Reading folder...' });
 
-            // Try to load classes.txt
+            // Try to load classes.txt from root
             await this.loadClasses(handle);
+
+            // Get or create label folder
+            const labelHandle = await handle.getDirectoryHandle('label', { create: true });
 
             const images = [];
             for await (const entry of handle.values()) {
                 if (entry.kind === 'file' && /\.(jpe?g|png|webp)$/i.test(entry.name)) {
-                    // Check if labeled
+                    // Check if labeled (looking inside label folder)
                     const txtName = entry.name.replace(/\.[^/.]+$/, "") + ".txt";
                     let isLabeled = false;
-                    try { await handle.getFileHandle(txtName); isLabeled = true; } catch (e) { }
+                    try { await labelHandle.getFileHandle(txtName); isLabeled = true; } catch (e) { }
 
                     images.push({
                         name: entry.name,
@@ -253,6 +256,7 @@ class App {
 
             state.set({
                 folderHandle: handle,
+                labelFolderHandle: labelHandle,
                 images,
                 currentImageIndex: images.length > 0 ? 0 : -1,
                 loading: false
@@ -287,7 +291,7 @@ class App {
     async loadAnnotations(imgName) {
         const txtName = imgName.replace(/\.[^/.]+$/, "") + ".txt";
         try {
-            const fileHandle = await state.data.folderHandle.getFileHandle(txtName);
+            const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName);
             const file = await fileHandle.getFile();
             const content = await file.text();
 
@@ -301,7 +305,7 @@ class App {
     }
 
     async saveAnnotations(index, annotations) {
-        if (!state.data.folderHandle || annotations.length === 0) return;
+        if (!state.data.labelFolderHandle || annotations.length === 0) return;
 
         const imgInfo = state.data.images[index];
         const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
@@ -312,7 +316,7 @@ class App {
                 .map(box => YoloHelper.toYolo(box, bitmap.width, bitmap.height))
                 .join('\n');
 
-            const fileHandle = await state.data.folderHandle.getFileHandle(txtName, { create: true });
+            const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(content);
             await writable.close();
@@ -323,7 +327,7 @@ class App {
             state.set({ images: newImages });
             this.renderImageList(newImages);
 
-            this.updateStatus(`Saved: ${txtName}`);
+            this.updateStatus(`Saved: label/${txtName}`);
         } catch (err) {
             console.error('Failed to save:', err);
         }
@@ -466,13 +470,13 @@ class App {
     }
 
     async migrateDatasetOnDelete(deletedId) {
-        const { folderHandle, images } = state.data;
+        const { labelFolderHandle, images } = state.data;
         let processed = 0;
 
         for (const imgInfo of images) {
             const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
             try {
-                const fileHandle = await folderHandle.getFileHandle(txtName);
+                const fileHandle = await labelFolderHandle.getFileHandle(txtName);
                 const file = await fileHandle.getFile();
                 const content = await file.text();
 

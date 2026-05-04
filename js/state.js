@@ -7,6 +7,7 @@ export class AppState {
     constructor() {
         this.data = {
             folderHandle: null,
+            labelFolderHandle: null,
             images: [], // { name, handle, status: 'pending'|'labeled' }
             currentImageIndex: -1,
             currentImageBitmap: null,
