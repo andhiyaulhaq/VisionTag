@@ -261,11 +261,11 @@ canvas {
     transform: translateY(-2px);
 }
 
-.tool-btn:active {
+.tool-btn:active, .tool-btn.active {
     background: var(--accent);
     color: white;
-    box-shadow: 0 0 10px var(--accent-glow);
-    transform: translateY(0) scale(0.9);
+    box-shadow: 0 0 15px var(--accent-glow);
+    transform: translateY(0) scale(0.95);
 }
 
 .btn {
