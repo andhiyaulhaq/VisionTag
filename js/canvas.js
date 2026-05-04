@@ -110,7 +110,7 @@ export class CanvasEngine {
                 y: startY,
                 width: 0,
                 height: 0,
-                classId: state.data.selectedClassId !== null ? state.data.selectedClassId : -1
+                classId: -1
             };
 
             state.set({
@@ -170,12 +170,18 @@ export class CanvasEngine {
         this.updateCrosshair(e);
     }
 
-    onMouseUp() {
+    onMouseUp(e) {
         if (this.interaction && this.interaction.type === 'draw') {
             const { boxId } = this.interaction;
             const box = state.data.annotations.find(b => b.id === boxId);
-            if (box && box.classId === -1) {
-                window.dispatchEvent(new CustomEvent('request-new-class', { detail: { boxId } }));
+            
+            if (box) {
+                // If classes exist, show dropdown. Otherwise, show "New Class" modal.
+                if (state.data.classes.length > 0) {
+                    this.showClassDropdown(boxId, e.clientX, e.clientY);
+                } else {
+                    window.dispatchEvent(new CustomEvent('request-new-class', { detail: { boxId } }));
+                }
             }
         }
 
