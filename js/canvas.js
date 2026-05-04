@@ -142,7 +142,22 @@ export class CanvasEngine {
             // Hover check
             const hit = this.hitTest(imgPos.x, imgPos.y);
             state.set({ hoveredBoxId: hit ? hit.boxId : null });
-            this.canvas.style.cursor = hit ? (hit.handle ? 'nwse-resize' : 'move') : (state.data.mode === 'draw' ? 'crosshair' : 'default');
+            
+            if (hit) {
+                if (hit.handle) {
+                    const cursorMap = {
+                        nw: 'nwse-resize', se: 'nwse-resize',
+                        ne: 'nesw-resize', sw: 'nesw-resize',
+                        n: 'ns-resize', s: 'ns-resize',
+                        e: 'ew-resize', w: 'ew-resize'
+                    };
+                    this.canvas.style.cursor = cursorMap[hit.handle] || 'crosshair';
+                } else {
+                    this.canvas.style.cursor = 'move';
+                }
+            } else {
+                this.canvas.style.cursor = (state.data.mode === 'draw' ? 'crosshair' : 'default');
+            }
         }
 
         this.updateCrosshair(e);
@@ -230,6 +245,7 @@ export class CanvasEngine {
 
     hitTest(x, y) {
         const handleSize = 8 / state.data.zoom;
+        const halfSize = handleSize / 2;
         
         // Check in reverse order (top boxes first)
         for (let i = state.data.annotations.length - 1; i >= 0; i--) {
@@ -237,8 +253,22 @@ export class CanvasEngine {
             
             // Check handles if selected
             if (box.id === state.data.selectedBoxId) {
-                if (Math.abs(x - (box.x + box.width)) < handleSize && Math.abs(y - (box.y + box.height)) < handleSize) return { boxId: box.id, handle: 'se' };
-                // Add more handles later for full 8-point resizing
+                const handles = {
+                    nw: { x: box.x, y: box.y },
+                    n:  { x: box.x + box.width / 2, y: box.y },
+                    ne: { x: box.x + box.width, y: box.y },
+                    e:  { x: box.x + box.width, y: box.y + box.height / 2 },
+                    se: { x: box.x + box.width, y: box.y + box.height },
+                    s:  { x: box.x + box.width / 2, y: box.y + box.height },
+                    sw: { x: box.x, y: box.y + box.height },
+                    w:  { x: box.x, y: box.y + box.height / 2 }
+                };
+
+                for (const [name, pos] of Object.entries(handles)) {
+                    if (Math.abs(x - pos.x) < halfSize && Math.abs(y - pos.y) < halfSize) {
+                        return { boxId: box.id, handle: name };
+                    }
+                }
             }
 
             // Check body
@@ -383,7 +413,7 @@ export class CanvasEngine {
 
             // 2. Draw Border
             this.ctx.strokeStyle = color;
-            this.ctx.lineWidth = (isSelected ? 3 : (isHovered ? 2 : 1)) / zoom;
+            this.ctx.lineWidth = 2 / zoom;
             
             if (isSelected) {
                 this.ctx.shadowBlur = 10 / zoom;
@@ -411,9 +441,21 @@ export class CanvasEngine {
         this.ctx.strokeStyle = color;
         this.ctx.lineWidth = 1 / state.data.zoom;
 
-        // Bottom-Right handle
-        this.ctx.fillRect(box.x + box.width - size/2, box.y + box.height - size/2, size, size);
-        this.ctx.strokeRect(box.x + box.width - size/2, box.y + box.height - size/2, size, size);
+        const handles = [
+            { x: box.x, y: box.y }, // nw
+            { x: box.x + box.width / 2, y: box.y }, // n
+            { x: box.x + box.width, y: box.y }, // ne
+            { x: box.x + box.width, y: box.y + box.height / 2 }, // e
+            { x: box.x + box.width, y: box.y + box.height }, // se
+            { x: box.x + box.width / 2, y: box.y + box.height }, // s
+            { x: box.x, y: box.y + box.height }, // sw
+            { x: box.x, y: box.y + box.height / 2 } // w
+        ];
+
+        handles.forEach(pos => {
+            this.ctx.fillRect(pos.x - size/2, pos.y - size/2, size, size);
+            this.ctx.strokeRect(pos.x - size/2, pos.y - size/2, size, size);
+        });
     }
 
     drawLabel(box, name, color) {
