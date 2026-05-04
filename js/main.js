@@ -287,7 +287,7 @@ class App {
         } catch (e) { return []; }
     }
 
-    async saveAnnotations(index, annotations, bitmap = state.data.currentImageBitmap) {
+    async saveAnnotations(index, annotations, bitmap = state.data.currentImageBitmap, skipUI = false) {
         if (!state.data.labelFolderHandle || annotations.length === 0 || !bitmap) return;
         const imgInfo = state.data.images[index];
         const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
@@ -297,11 +297,15 @@ class App {
             const writable = await fileHandle.createWritable();
             await writable.write(content);
             await writable.close();
+            
             const newImages = [...state.data.images];
             newImages[index].status = 'labeled';
             state.set({ images: newImages });
-            this.renderImageList(newImages);
-            this.updateStatus(`Saved: label/${txtName}`);
+
+            if (!skipUI) {
+                this.renderImageList(newImages);
+                this.updateStatus(`Saved: label/${txtName}`);
+            }
         } catch (err) { console.error('Failed to save:', err); }
     }
 
@@ -583,65 +587,76 @@ class App {
         const fill = overlay.querySelector('#ai-progress-fill');
         const text = overlay.querySelector('#ai-progress-text');
         state.set({ isAutoLabeling: true });
-        for (let i = 0; i < images.length; i++) {
+        
+        let completedCount = 0;
+        const totalImages = images.length;
+        let batchClasses = [...state.data.classes]; // Local sync for parallel tasks
+        
+        const updateUI = (imgName) => {
+            requestAnimationFrame(() => {
+                text.textContent = `⚡ AI Processing: ${completedCount} / ${totalImages}`;
+                fill.style.width = `${(completedCount / totalImages) * 100}%`;
+                const progressText = document.getElementById('ai-progress-text');
+                if (progressText) progressText.textContent = `Processing: ${imgName} (${completedCount}/${totalImages})`;
+            });
+        };
+
+        const CONCURRENCY = 4;
+        for (let i = 0; i < totalImages; i += CONCURRENCY) {
             if (cancelled) break;
-            text.textContent = `${i + 1} / ${images.length} : Processing ${images[i].name}...`;
-            fill.style.width = `${((i + 1) / images.length) * 100}%`;
-            try {
-                const file = await images[i].handle.getFile();
-                const bitmap = await createImageBitmap(file);
-                
-                // 1. Load existing annotations to merge (Elite requirement: Preserve Work)
-                const existingAnnotations = await this.loadAnnotations(images[i].name, bitmap);
-                
-                // 2. Run Inference
-                const predictions = await ai.predict(bitmap);
 
-                if (predictions.length > 0) {
-                    const currentClasses = [...state.data.classes];
-                    let classesChanged = false;
+            const chunk = images.slice(i, i + CONCURRENCY);
+            await Promise.all(chunk.map(async (img, chunkOffset) => {
+                const idx = i + chunkOffset;
+                if (idx >= totalImages || cancelled) return;
 
-                    const mapped = predictions.map(p => {
-                        const aiName = ai.cocoClasses[p.classId] || `class_${p.classId}`;
-                        let projectClass = currentClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
+                try {
+                    const file = await img.handle.getFile();
+                    const bitmap = await createImageBitmap(file);
+                    const existingAnnotations = await this.loadAnnotations(img.name, bitmap);
+                    const predictions = await ai.predict(bitmap);
+
+                    if (predictions.length > 0) {
+                        let classesChanged = false;
+                        const mapped = predictions.map(p => {
+                            const aiName = ai.cocoClasses[p.classId] || `class_${p.classId}`;
+                            let projectClass = batchClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
+                            
+                            if (!projectClass) {
+                                const newId = batchClasses.length > 0 ? Math.max(...batchClasses.map(c => c.id)) + 1 : 0;
+                                projectClass = { id: newId, name: aiName, color: YoloHelper.generateColor(newId) };
+                                batchClasses.push(projectClass);
+                                classesChanged = true;
+                            }
+                            return { ...p, classId: projectClass.id };
+                        });
                         
-                        if (!projectClass) {
-                            const newId = currentClasses.length > 0 ? Math.max(...currentClasses.map(c => c.id)) + 1 : 0;
-                            projectClass = {
-                                id: newId,
-                                name: aiName,
-                                color: YoloHelper.generateColor(newId)
-                            };
-                            currentClasses.push(projectClass);
-                            classesChanged = true;
+                        if (classesChanged) {
+                            state.set({ classes: [...batchClasses] });
+                            await this.saveClasses(batchClasses);
                         }
-                        return { ...p, classId: projectClass.id };
-                    });
-                    
-                    if (classesChanged) {
-                        state.set({ classes: currentClasses });
-                        await this.saveClasses(currentClasses);
-                    }
 
-                    const merged = [...existingAnnotations, ...mapped];
-                    console.log(`🖼️ Image ${i}: ${mapped.length} AI boxes merged with ${existingAnnotations.length} existing.`);
-                    
-                    await this.saveAnnotations(i, merged, bitmap);
-                    
-                    if (i === state.data.currentImageIndex) {
-                        state.set({ annotations: merged });
-                        // Force canvas engine to recognize update
-                        if (this.canvasEngine) this.canvasEngine.draw();
+                        const merged = [...existingAnnotations, ...mapped];
+                        // Save without re-rendering sidebar (pass true to skip UI)
+                        await this.saveAnnotations(idx, merged, bitmap, true);
+                        
+                        if (idx === state.data.currentImageIndex) {
+                            state.set({ annotations: merged });
+                            if (this.canvasEngine) this.canvasEngine.draw();
+                        }
+                        img.status = 'labeled';
                     }
-                    images[i].status = 'labeled';
-                } else {
-                    console.log(`⚪ Image ${i}: No AI detections found.`);
+                } catch (err) { 
+                    console.error(`Failed to auto-label ${img.name}:`, err); 
+                } finally {
+                    completedCount++;
+                    updateUI(img.name);
                 }
-            } catch (err) { console.error(`Failed to auto-label ${images[i].name}:`, err); }
+            }));
         }
         overlay.remove();
         state.set({ isAutoLabeling: false });
-        this.renderImageList(images);
+        this.renderImageList(images); // Final single refresh
         if (state.data.currentImageIndex !== -1) this.loadImage(state.data.currentImageIndex);
         this.updateStatus(cancelled ? '⚠️ AI Batch Cancelled' : '✅ AI Batch Complete');
     }
