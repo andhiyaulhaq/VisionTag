@@ -90,12 +90,19 @@ export class CanvasEngine {
         }
 
         // Draw mode - Create new box
-        if (state.data.mode === 'draw' && !state.data.isPanning) {
+        if (state.data.mode === 'draw' && !state.data.isPanning && state.data.currentImageBitmap) {
+            const imgWidth = state.data.currentImageBitmap.width;
+            const imgHeight = state.data.currentImageBitmap.height;
+
+            // Constrain start position
+            const startX = Math.max(0, Math.min(imgPos.x, imgWidth));
+            const startY = Math.max(0, Math.min(imgPos.y, imgHeight));
+
             const newId = Date.now();
             const newBox = {
                 id: newId,
-                x: imgPos.x,
-                y: imgPos.y,
+                x: startX,
+                y: startY,
                 width: 0,
                 height: 0,
                 classId: state.data.selectedClassId !== null ? state.data.selectedClassId : -1
@@ -109,7 +116,7 @@ export class CanvasEngine {
             this.interaction = {
                 type: 'draw',
                 boxId: newId,
-                startImgPos: imgPos
+                startImgPos: { x: startX, y: startY }
             };
         } else {
             state.set({ selectedBoxId: null });
@@ -155,7 +162,12 @@ export class CanvasEngine {
     }
 
     handleInteraction(imgPos) {
+        if (!state.data.currentImageBitmap) return;
+
         const { type, boxId, startImgPos, startBox, handle } = this.interaction;
+        const imgWidth = state.data.currentImageBitmap.width;
+        const imgHeight = state.data.currentImageBitmap.height;
+
         const dx = imgPos.x - startImgPos.x;
         const dy = imgPos.y - startImgPos.y;
 
@@ -163,30 +175,48 @@ export class CanvasEngine {
             if (box.id !== boxId) return box;
 
             if (type === 'draw') {
+                const curX = Math.max(0, Math.min(imgPos.x, imgWidth));
+                const curY = Math.max(0, Math.min(imgPos.y, imgHeight));
+                
                 return {
                     ...box,
-                    x: Math.min(startImgPos.x, imgPos.x),
-                    y: Math.min(startImgPos.y, imgPos.y),
-                    width: Math.abs(dx),
-                    height: Math.abs(dy)
+                    x: Math.min(startImgPos.x, curX),
+                    y: Math.min(startImgPos.y, curY),
+                    width: Math.abs(startImgPos.x - curX),
+                    height: Math.abs(startImgPos.y - curY)
                 };
             }
 
             if (type === 'move') {
-                return { ...box, x: startBox.x + dx, y: startBox.y + dy };
+                let newX = startBox.x + dx;
+                let newY = startBox.y + dy;
+
+                // Constrain position
+                newX = Math.max(0, Math.min(newX, imgWidth - startBox.width));
+                newY = Math.max(0, Math.min(newY, imgHeight - startBox.height));
+
+                return { ...box, x: newX, y: newY };
             }
 
             if (type === 'resize') {
                 const b = { ...box };
-                if (handle.includes('e')) b.width = Math.max(5, startBox.width + dx);
-                if (handle.includes('s')) b.height = Math.max(5, startBox.height + dy);
+                if (handle.includes('e')) {
+                    b.width = Math.max(5, Math.min(startBox.width + dx, imgWidth - startBox.x));
+                }
+                if (handle.includes('s')) {
+                    b.height = Math.max(5, Math.min(startBox.height + dy, imgHeight - startBox.y));
+                }
                 if (handle.includes('w')) {
-                    const newWidth = Math.max(5, startBox.width - dx);
+                    const maxAllowedDx = startBox.x;
+                    const constrainedDx = Math.max(-maxAllowedDx, dx);
+                    const newWidth = Math.max(5, startBox.width - constrainedDx);
                     b.x = startBox.x + (startBox.width - newWidth);
                     b.width = newWidth;
                 }
                 if (handle.includes('n')) {
-                    const newHeight = Math.max(5, startBox.height - dy);
+                    const maxAllowedDy = startBox.y;
+                    const constrainedDy = Math.max(-maxAllowedDy, dy);
+                    const newHeight = Math.max(5, startBox.height - constrainedDy);
                     b.y = startBox.y + (startBox.height - newHeight);
                     b.height = newHeight;
                 }
