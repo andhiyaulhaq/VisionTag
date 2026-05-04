@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionTag | Elite YOLO Annotator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+
+<body class="dark-theme">
+    <div id="app">
+        <!-- Header / Toolbar -->
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-icon">V</span>
+                <span class="logo-text">Vision<span>Tag</span></span>
+            </div>
+            <div class="toolbar-center">
+                <button id="btn-select" class="tool-btn active" title="Select (V)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+                        <path d="m13 13 6 6" />
+                    </svg>
+                </button>
+                <button id="btn-draw" class="tool-btn" title="Draw Box (W)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                        <path d="M3 9h18" />
+                        <path d="M9 3v18" />
+                    </svg>
+                </button>
+                <div class="divider"></div>
+                <button id="btn-prev" class="tool-btn" title="Previous (A)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m15 18-6-6 6-6" />
+                    </svg>
+                </button>
+                <span id="image-counter">0 / 0</span>
+                <button id="btn-next" class="tool-btn" title="Next (D)">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="m9 18 6-6-6-6" />
+                    </svg>
+                </button>
+            </div>
+            <div class="toolbar-right">
+                <button id="btn-open" class="btn btn-secondary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+                    </svg>
+                    Open Folder
+                </button>
+                <button id="btn-export" class="btn btn-primary">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" x2="12" y1="15" y2="3" />
+                    </svg>
+                    Export YOLO
+                </button>
+            </div>
+        </header>
+
+        <main class="app-content">
+            <!-- Left Sidebar: Explorer -->
+            <aside class="sidebar-left">
+                <div class="sidebar-header">
+                    <h3>Explorer</h3>
+                    <span id="file-count" class="badge">0 items</span>
+                </div>
+                <div id="image-list" class="image-list">
+                    <div class="empty-state">No folder loaded</div>
+                </div>
+            </aside>
+
+            <!-- Center: Canvas Workspace -->
+            <section id="workspace" class="workspace">
+                <canvas id="main-canvas"></canvas>
+                
+                <!-- Overlays -->
+                <div id="loading-overlay" class="overlay hidden">
+                    <div class="spinner"></div>
+                    <p>Loading dataset...</p>
+                </div>
+                
+                <!-- Crosshair Guide -->
+                <div id="crosshair-v" class="crosshair hidden"></div>
+                <div id="crosshair-h" class="crosshair hidden"></div>
+            </section>
+
+            <!-- Right Sidebar: Classes & Inspector -->
+            <aside class="sidebar-right">
+                <div class="sidebar-section">
+                    <div class="section-header">
+                        <h3>Classes</h3>
+                        <button id="btn-add-class" class="icon-btn" title="Add Class">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                    </div>
+                    <div id="class-list" class="class-list">
+                        <!-- Classes will be injected here -->
+                    </div>
+                </div>
+
+                <div class="sidebar-section box-inspector">
+                    <div class="section-header">
+                        <h3>Annotations</h3>
+                        <span id="box-count" class="badge">0</span>
+                    </div>
+                    <div id="annotation-list" class="annotation-list">
+                        <div class="empty-state-small">No annotations yet</div>
+                    </div>
+                </div>
+
+                <div class="sidebar-section hotkeys-tip">
+                    <div class="section-header">
+                        <h3>Hotkeys</h3>
+                    </div>
+                    <ul class="hotkey-list">
+                        <li><span>Draw Mode</span> <kbd>W</kbd></li>
+                        <li><span>Select Mode</span> <kbd>V</kbd></li>
+                        <li><span>Next Image</span> <kbd>D</kbd></li>
+                        <li><span>Prev Image</span> <kbd>A</kbd></li>
+                        <li><span>Delete Box</span> <kbd>Del</kbd></li>
+                        <li><span>Pan View</span> <kbd>Space</kbd></li>
+                    </ul>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div id="status-message">Ready</div>
+            <div class="footer-stats">
+                <span id="coord-display">X: 0, Y: 0</span>
+                <span id="zoom-display">100%</span>
+            </div>
+        </footer>
+        
+        <!-- Custom Modal System -->
+        <div id="modal-container" class="modal-overlay hidden">
+            <div class="modal-card">
+                <h2 id="modal-title">New Class</h2>
+                <div class="modal-body">
+                    <p id="modal-message" class="modal-message">Please name your first class to begin labeling:</p>
+                    <input type="text" id="modal-input" class="modal-input" placeholder="e.g. Car, Dog, etc.">
+                </div>
+                <div class="modal-footer">
+                    <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
+                    <button id="modal-confirm" class="btn btn-primary">Create Class</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="./js/main.js"></script>
+</body>
+
+</html>
