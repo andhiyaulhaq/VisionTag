@@ -271,8 +271,11 @@ export class CanvasEngine {
             const fontSize = 18 / zoom;
             this.ctx.font = `600 ${fontSize}px 'Inter', system-ui, sans-serif`;
             const padding = 6 / zoom;
+            const chevronSize = 8 / zoom;
+            const chevronGap = 8 / zoom;
+
             const textWidth = this.ctx.measureText(name).width;
-            const bgWidth = textWidth + padding * 2;
+            const bgWidth = textWidth + padding * 2 + chevronSize + chevronGap;
             const bgHeight = fontSize + padding * 2;
 
             if (x >= box.x && x <= box.x + bgWidth && y >= box.y - bgHeight && y <= box.y) {
@@ -491,15 +494,31 @@ export class CanvasEngine {
         this.ctx.font = `600 ${fontSize}px 'Inter', system-ui, sans-serif`;
 
         const padding = 6 / state.data.zoom;
+        const chevronSize = 8 / state.data.zoom;
+        const chevronGap = 8 / state.data.zoom;
+        
         const textWidth = this.ctx.measureText(name).width;
-        const bgWidth = textWidth + padding * 2;
+        const bgWidth = textWidth + padding * 2 + chevronSize + chevronGap;
         const bgHeight = fontSize + padding * 2;
 
+        // 1. Background
         this.ctx.fillStyle = color;
         this.ctx.fillRect(box.x, box.y - bgHeight, bgWidth, bgHeight);
 
+        // 2. Text
         this.ctx.fillStyle = '#fff';
         this.ctx.fillText(name, box.x + padding, box.y - padding);
+
+        // 3. Chevron Hint (Small downward triangle)
+        const cx = box.x + padding + textWidth + chevronGap;
+        const cy = box.y - padding - (fontSize / 2.5); // Adjust for vertical alignment
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(cx, cy);
+        this.ctx.lineTo(cx + chevronSize, cy);
+        this.ctx.lineTo(cx + chevronSize/2, cy + chevronSize/2);
+        this.ctx.closePath();
+        this.ctx.fill();
     }
 
     showClassDropdown(boxId, clientX, clientY) {
