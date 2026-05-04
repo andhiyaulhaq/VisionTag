@@ -431,7 +431,7 @@ export class CanvasEngine {
             const isSelected = box.id === selectedBoxId;
             const isHovered = box.id === hoveredBoxId;
             const cls = classes.find(c => c.id === box.classId);
-            const color = cls ? cls.color : '#ffffff';
+            const color = cls ? cls.color : '#3b82f6';
 
             this.ctx.save();
 
