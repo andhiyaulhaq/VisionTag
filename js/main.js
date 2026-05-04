@@ -191,7 +191,7 @@ class App {
             const bitmap = await createImageBitmap(file);
 
             // 1. Load existing annotations
-            const annotations = await this.loadAnnotations(imageInfo.name);
+            const annotations = await this.loadAnnotations(imageInfo.name, bitmap);
 
             // 2. Auto-center and fit image on first load
             this.fitImageToCanvas(bitmap);
@@ -288,14 +288,13 @@ class App {
         }
     }
 
-    async loadAnnotations(imgName) {
+    async loadAnnotations(imgName, bitmap) {
         const txtName = imgName.replace(/\.[^/.]+$/, "") + ".txt";
         try {
             const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName);
             const file = await fileHandle.getFile();
             const content = await file.text();
 
-            const bitmap = state.data.currentImageBitmap;
             return content.split('\n')
                 .map(line => YoloHelper.fromYolo(line, bitmap.width, bitmap.height))
                 .filter(b => b !== null);
