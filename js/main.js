@@ -44,11 +44,10 @@ class App {
                 currentImage: state.currentImage?.name || 'none'
             };
             console.log('🖱️ Click Log:', logEntry);
-        }, true); // Use capture phase to catch all clicks
+        }, true);
     }
 
     initUI() {
-        // Cache DOM elements
         this.dom = {
             btnOpen: document.getElementById('btn-open'),
             btnDraw: document.getElementById('btn-draw'),
@@ -65,7 +64,6 @@ class App {
             zoomDisplay: document.getElementById('zoom-display'),
             btnAddClass: document.getElementById('btn-add-class'),
             
-            // Modal Elements
             modal: document.getElementById('modal-container'),
             modalTitle: document.getElementById('modal-title'),
             modalMessage: document.getElementById('modal-message'),
@@ -73,7 +71,6 @@ class App {
             modalConfirm: document.getElementById('modal-confirm'),
             modalCancel: document.getElementById('modal-cancel'),
 
-            // AI UI
             btnLoadModel: document.getElementById('btn-load-model'),
             btnAutoLabelAll: document.getElementById('btn-auto-label-all'),
             modelStatusBadge: document.getElementById('model-status-badge'),
@@ -83,39 +80,26 @@ class App {
     }
 
     initEventListeners() {
-        // Mode switching
         this.dom.btnDraw.addEventListener('click', () => state.set({ mode: 'draw' }));
         this.dom.btnSelect.addEventListener('click', () => state.set({ mode: 'select' }));
-
-        // Folder opening
         this.dom.btnOpen.addEventListener('click', () => this.handleOpenFolder());
 
-        // Handle empty class drawing request
         window.addEventListener('request-new-class', (e) => this.promptForFirstClass(e));
 
-        // Class management
-        // Responsive Resize
         window.addEventListener('resize', () => {
             if (state.data.currentImageBitmap) {
                 this.fitImageToCanvas(state.data.currentImageBitmap);
             }
         });
 
-        // Class management
         this.dom.btnAddClass.addEventListener('click', () => this.handleAddClass());
-
-        // AI Controls
         this.dom.btnLoadModel.addEventListener('click', () => this.handleLoadCustomModel());
         this.dom.btnAutoLabelAll.addEventListener('click', () => this.handleAutoLabelDataset());
 
-        // Keyboard shortcuts
         window.addEventListener('keydown', (e) => {
-            // Ignore if user is typing in an input
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-            
             const key = e.key.toLowerCase();
             
-            // Undo / Redo
             if (e.ctrlKey && key === 'z') {
                 e.preventDefault();
                 if (e.shiftKey) state.redo();
@@ -134,7 +118,6 @@ class App {
             if (key === 'a') this.prevImage();
             if (key === 'delete' || key === 'backspace') this.deleteSelectedBox();
 
-            // Quick Class Assignment (1-9)
             if (/^[1-9]$/.test(key)) {
                 this.assignClassToSelected(parseInt(key) - 1);
             }
@@ -167,14 +150,12 @@ class App {
 
     initStateListeners() {
         state.subscribe((data, oldData) => {
-            // Update UI based on mode
             if (data.mode !== oldData.mode) {
                 this.dom.btnDraw.classList.toggle('active', data.mode === 'draw');
                 this.dom.btnSelect.classList.toggle('active', data.mode === 'select');
                 this.updateStatus(`Mode: ${data.mode.toUpperCase()}`);
             }
 
-            // Update image counter
             if (data.images.length !== oldData.images.length || data.currentImageIndex !== oldData.currentImageIndex) {
                 this.dom.imageCounter.textContent = `${data.currentImageIndex + 1} / ${data.images.length}`;
                 this.dom.fileCountBadge.textContent = `${data.images.length} items`;
@@ -209,7 +190,6 @@ class App {
                 document.getElementById('loading-overlay').classList.toggle('hidden', !data.loading);
             }
 
-            // AI UI Updates
             if (data.modelStatus !== oldData.modelStatus) {
                 this.dom.modelStatusBadge.className = `badge status-${data.modelStatus}`;
                 this.dom.modelStatusBadge.textContent = data.modelStatus.toUpperCase();
@@ -227,19 +207,14 @@ class App {
 
         try {
             state.set({ loading: true, statusMessage: `Loading ${imageInfo.name}...` });
-
             const file = await imageInfo.handle.getFile();
             const bitmap = await createImageBitmap(file);
-
-            // 1. Load existing annotations
             const annotations = await this.loadAnnotations(imageInfo.name, bitmap);
-
-            // 2. Auto-center and fit image on first load
             this.fitImageToCanvas(bitmap);
 
             state.undoStack = [];
             state.redoStack = [];
-            state.saveHistory(); // Initial state
+            state.saveHistory();
 
             state.set({
                 currentImageBitmap: bitmap,
@@ -256,17 +231,11 @@ class App {
     fitImageToCanvas(bitmap) {
         const container = document.getElementById('workspace').getBoundingClientRect();
         const padding = 40;
-
         const availableWidth = container.width - padding * 2;
         const availableHeight = container.height - padding * 2;
-
-        const scaleX = availableWidth / bitmap.width;
-        const scaleY = availableHeight / bitmap.height;
-        const zoom = Math.min(scaleX, scaleY); // Allow upscaling
-
+        const zoom = Math.min(availableWidth / bitmap.width, availableHeight / bitmap.height);
         const panX = (container.width - bitmap.width * zoom) / 2;
         const panY = (container.height - bitmap.height * zoom) / 2;
-
         state.set({ zoom, pan: { x: panX, y: panY } });
     }
 
@@ -274,42 +243,21 @@ class App {
         try {
             const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
             state.set({ loading: true, statusMessage: 'Reading folder...' });
-
-            // Try to load classes.txt from root
             await this.loadClasses(handle);
-
-            // Get or create label folder
             const labelHandle = await handle.getDirectoryHandle('label', { create: true });
-
             const images = [];
             for await (const entry of handle.values()) {
                 if (entry.kind === 'file' && /\.(jpe?g|png|webp)$/i.test(entry.name)) {
-                    // Check if labeled (looking inside label folder)
                     const txtName = entry.name.replace(/\.[^/.]+$/, "") + ".txt";
                     let isLabeled = false;
                     try { await labelHandle.getFileHandle(txtName); isLabeled = true; } catch (e) { }
-
-                    images.push({
-                        name: entry.name,
-                        handle: entry,
-                        status: isLabeled ? 'labeled' : 'pending'
-                    });
+                    images.push({ name: entry.name, handle: entry, status: isLabeled ? 'labeled' : 'pending' });
                 }
             }
-
-            images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
-
-            state.set({
-                folderHandle: handle,
-                labelFolderHandle: labelHandle,
-                images,
-                currentImageIndex: images.length > 0 ? 0 : -1,
-                loading: false
-            });
-
+            images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+            state.set({ folderHandle: handle, labelFolderHandle: labelHandle, images, currentImageIndex: images.length > 0 ? 0 : -1, loading: false });
             this.updateStatus(`Loaded ${images.length} images`);
             this.renderImageList(images);
-
         } catch (err) {
             console.error('Failed to open folder:', err);
             this.updateStatus('Access denied or folder empty', true);
@@ -322,14 +270,10 @@ class App {
             const file = await fileHandle.getFile();
             const content = await file.text();
             const classes = YoloHelper.parseClasses(content);
-            if (classes.length > 0) {
-                state.set({ classes, selectedClassId: classes[0].id });
-            } else {
-                state.set({ classes: [], selectedClassId: null });
-            }
+            if (classes.length > 0) state.set({ classes, selectedClassId: classes[0].id });
+            else state.set({ classes: [], selectedClassId: null });
         } catch (e) {
             state.set({ classes: [], selectedClassId: null });
-            console.log('No classes.txt found, starting empty.');
         }
     }
 
@@ -339,41 +283,26 @@ class App {
             const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName);
             const file = await fileHandle.getFile();
             const content = await file.text();
-
-            return content.split('\n')
-                .map(line => YoloHelper.fromYolo(line, bitmap.width, bitmap.height))
-                .filter(b => b !== null);
-        } catch (e) {
-            return [];
-        }
+            return content.split('\n').map(line => YoloHelper.fromYolo(line, bitmap.width, bitmap.height)).filter(b => b !== null);
+        } catch (e) { return []; }
     }
 
     async saveAnnotations(index, annotations, bitmap = state.data.currentImageBitmap) {
         if (!state.data.labelFolderHandle || annotations.length === 0 || !bitmap) return;
-
         const imgInfo = state.data.images[index];
         const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
-
         try {
-            const content = annotations
-                .map(box => YoloHelper.toYolo(box, bitmap.width, bitmap.height))
-                .join('\n');
-
+            const content = annotations.map(box => YoloHelper.toYolo(box, bitmap.width, bitmap.height)).join('\n');
             const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(content);
             await writable.close();
-
-            // Update status in list
             const newImages = [...state.data.images];
             newImages[index].status = 'labeled';
             state.set({ images: newImages });
             this.renderImageList(newImages);
-
             this.updateStatus(`Saved: label/${txtName}`);
-        } catch (err) {
-            console.error('Failed to save:', err);
-        }
+        } catch (err) { console.error('Failed to save:', err); }
     }
 
     renderImageList(images) {
@@ -381,20 +310,14 @@ class App {
             this.dom.imageList.innerHTML = '<div class="empty-state">No images found</div>';
             return;
         }
-
         this.dom.imageList.innerHTML = images.map((img, idx) => `
             <div class="image-item ${idx === state.data.currentImageIndex ? 'active' : ''}" data-index="${idx}">
                 <span class="img-name">${img.name}</span>
                 <span class="status-dot ${img.status}"></span>
             </div>
         `).join('');
-
-        // Add click listeners to items
         this.dom.imageList.querySelectorAll('.image-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const index = parseInt(item.dataset.index);
-                state.set({ currentImageIndex: index });
-            });
+            item.addEventListener('click', () => state.set({ currentImageIndex: parseInt(item.dataset.index) }));
         });
     }
 
@@ -407,245 +330,163 @@ class App {
                 <button class="btn-delete-class" title="Delete Class">&times;</button>
             </div>
         `).join('');
-
         this.dom.classList.querySelectorAll('.class-item').forEach(item => {
             const nameSpan = item.querySelector('.class-name');
-            const deleteBtn = item.querySelector('.btn-delete-class');
             const id = parseInt(item.dataset.id);
-
-            // Select or Reassign Class
             item.addEventListener('click', (e) => {
                 if (e.target.tagName !== 'INPUT' && !e.target.classList.contains('btn-delete-class')) {
-                    if (state.data.selectedBoxId !== null) {
-                        this.reassignSelectedBox(id);
-                    } else {
-                        state.set({ selectedClassId: id });
-                    }
+                    if (state.data.selectedBoxId !== null) this.reassignSelectedBox(id);
+                    else state.set({ selectedClassId: id });
                 }
             });
-
-            // Delete Class
-            deleteBtn.addEventListener('click', (e) => {
+            item.querySelector('.btn-delete-class').addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.handleDeleteClass(id);
             });
-
-            // Double-click to rename
             nameSpan.addEventListener('dblclick', () => {
                 const input = document.createElement('input');
                 input.value = nameSpan.textContent;
                 input.className = 'class-rename-input';
-                
                 nameSpan.replaceWith(input);
                 input.focus();
-
                 const finishRename = () => {
                     const newName = input.value.trim() || nameSpan.textContent;
-                    const newClasses = state.data.classes.map(c => 
-                        c.id === id ? { ...c, name: newName } : c
-                    );
+                    const newClasses = state.data.classes.map(c => c.id === id ? { ...c, name: newName } : c);
                     state.set({ classes: newClasses });
                     this.saveClasses(newClasses);
                 };
-
                 input.addEventListener('blur', finishRename);
-                input.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') finishRename();
-                });
+                input.addEventListener('keydown', (e) => { if (e.key === 'Enter') finishRename(); });
             });
         });
     }
 
     assignClassToSelected(classIndex) {
         const cls = state.data.classes[classIndex];
-        if (cls && state.data.selectedBoxId !== null) {
-            this.reassignSelectedBox(cls.id);
-        } else if (cls) {
-            state.set({ selectedClassId: cls.id });
-            this.updateStatus(`Selected Class: ${cls.name}`);
-        }
+        if (cls && state.data.selectedBoxId !== null) this.reassignSelectedBox(cls.id);
+        else if (cls) state.set({ selectedClassId: cls.id });
     }
 
     reassignSelectedBox(newClassId) {
         const { selectedBoxId, annotations } = state.data;
-        const newAnnotations = annotations.map(box => 
-            box.id === selectedBoxId ? { ...box, classId: newClassId } : box
-        );
+        const newAnnotations = annotations.map(box => box.id === selectedBoxId ? { ...box, classId: newClassId } : box);
         state.set({ annotations: newAnnotations });
-        this.updateStatus(`Reassigned to class ${newClassId}`);
         this.saveClasses(state.data.classes);
     }
 
     async handleDeleteClass(id) {
         const cls = state.data.classes.find(c => c.id === id);
         if (!cls) return;
+        this.showModal({
+            title: 'Delete Class',
+            message: `🚨 WARNING: This will remove ALL annotations of type "${cls.name}" from EVERY image. This cannot be undone. Proceed?`,
+            confirmText: 'Delete Permanently',
+            cancelText: 'Keep Class',
+            onConfirm: () => this.performDeleteClassMigration(id, cls.name)
+        });
+    }
 
-        const confirmMsg = `🚨 DEEP CLEANUP WARNING: Deleting "${cls.name}" will remove ALL annotations of this type from EVERY image in your folder and re-index the rest. \n\nThis action cannot be undone. Proceed?`;
-        
-        if (confirm(confirmMsg)) {
-            state.set({ loading: true, statusMessage: '🔄 Migrating dataset...' });
-
-            try {
-                // 1. Update UI and current state
-                const newAnnotations = state.data.annotations.filter(box => box.classId !== id);
-                const newClasses = state.data.classes
-                    .filter(c => c.id !== id)
-                    .map((c, index) => ({ ...c, id: index }));
-
-                // 2. Perform Global Migration on Disk
-                await this.migrateDatasetOnDelete(id);
-
-                state.set({ 
-                    classes: newClasses, 
-                    annotations: newAnnotations,
-                    selectedClassId: newClasses.length > 0 ? newClasses[0].id : null,
-                    loading: false
-                });
-
-                await this.saveClasses(newClasses);
-                this.updateStatus(`✅ Dataset fully migrated. Removed class: ${cls.name}`);
-            } catch (err) {
-                console.error('Migration failed:', err);
-                state.set({ loading: false });
-                this.updateStatus('❌ Migration failed. Some files may be out of sync.', true);
-            }
+    async performDeleteClassMigration(id, name) {
+        state.set({ loading: true, statusMessage: '🔄 Migrating dataset...' });
+        try {
+            const newAnnotations = state.data.annotations.filter(box => box.classId !== id);
+            const newClasses = state.data.classes.filter(c => c.id !== id).map((c, idx) => ({ ...c, id: idx }));
+            await this.migrateDatasetOnDelete(id);
+            state.set({ classes: newClasses, annotations: newAnnotations, selectedClassId: newClasses[0]?.id || null, loading: false });
+            await this.saveClasses(newClasses);
+            this.updateStatus(`✅ Removed class: ${name}`);
+        } catch (err) {
+            console.error('Migration failed:', err);
+            state.set({ loading: false });
         }
     }
 
     async migrateDatasetOnDelete(deletedId) {
         const { labelFolderHandle, images } = state.data;
-        let processed = 0;
-
         for (const imgInfo of images) {
             const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
             try {
                 const fileHandle = await labelFolderHandle.getFileHandle(txtName);
                 const file = await fileHandle.getFile();
                 const content = await file.text();
-
-                const lines = content.split('\n').filter(line => line.trim().length > 0);
-                const newLines = lines
-                    .map(line => {
-                        const parts = line.split(' ');
-                        const classId = parseInt(parts[0]);
-                        if (classId === deletedId) return null; // Remove
-                        if (classId > deletedId) {
-                            parts[0] = (classId - 1).toString(); // Shift down
-                        }
-                        return parts.join(' ');
-                    })
-                    .filter(line => line !== null);
-
+                const newLines = content.split('\n').map(line => {
+                    const parts = line.split(' ');
+                    const classId = parseInt(parts[0]);
+                    if (classId === deletedId) return null;
+                    if (classId > deletedId) parts[0] = (classId - 1).toString();
+                    return parts.join(' ');
+                }).filter(l => l !== null);
                 const writable = await fileHandle.createWritable();
                 await writable.write(newLines.join('\n'));
                 await writable.close();
-            } catch (e) {
-                // Skip files that don't exist
-            }
-            
-            processed++;
-            if (processed % 5 === 0) {
-                state.set({ statusMessage: `🔄 Migrating: ${processed}/${images.length} files...` });
-            }
+            } catch (e) { }
         }
     }
 
-    showModal({ title, message, placeholder, confirmText, onConfirm }) {
+    showModal({ title, message, inputPlaceholder = '', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel }) {
         this.dom.modalTitle.textContent = title;
         this.dom.modalMessage.textContent = message;
-        this.dom.modalInput.placeholder = placeholder || '';
-        this.dom.modalInput.value = '';
-        this.dom.modalConfirm.textContent = confirmText || 'Confirm';
+        this.dom.modalConfirm.textContent = confirmText;
+        this.dom.modalCancel.textContent = cancelText;
         
+        if (inputPlaceholder) {
+            this.dom.modalInput.classList.remove('hidden');
+            this.dom.modalInput.placeholder = inputPlaceholder;
+            this.dom.modalInput.value = '';
+            setTimeout(() => this.dom.modalInput.focus(), 100);
+        } else {
+            this.dom.modalInput.classList.add('hidden');
+        }
         this.dom.modal.classList.remove('hidden');
-        this.dom.modalInput.focus();
-
-        const close = () => {
-            this.dom.modal.classList.add('hidden');
-            this.dom.modalConfirm.onclick = null;
-            this.dom.modalCancel.onclick = null;
-        };
-
+        const newConfirm = this.dom.modalConfirm.cloneNode(true);
+        this.dom.modalConfirm.replaceWith(newConfirm);
+        this.dom.modalConfirm = newConfirm;
+        const newCancel = this.dom.modalCancel.cloneNode(true);
+        this.dom.modalCancel.replaceWith(newCancel);
+        this.dom.modalCancel = newCancel;
         this.dom.modalConfirm.onclick = () => {
-            const val = this.dom.modalInput.value.trim();
-            if (val) {
-                onConfirm(val);
-                close();
-            }
+            const value = this.dom.modalInput.value.trim();
+            this.dom.modal.classList.add('hidden');
+            if (onConfirm) onConfirm(value);
         };
-
-        this.dom.modalCancel.onclick = close;
-        
-        // Enter key to confirm
-        this.dom.modalInput.onkeydown = (e) => {
-            if (e.key === 'Enter') this.dom.modalConfirm.click();
-            if (e.key === 'Escape') close();
+        this.dom.modalCancel.onclick = () => {
+            this.dom.modal.classList.add('hidden');
+            if (onCancel) onCancel();
         };
     }
 
-    promptForFirstClass(event) {
-        const boxId = event?.detail?.boxId;
-        
+    handleAddClass() {
         this.showModal({
-            title: 'Define First Class',
-            message: 'You just drew your first box! What class should this represent?',
-            placeholder: 'e.g. Car, Dog, etc.',
-            confirmText: 'Create & Assign',
+            title: 'Add New Class',
+            message: 'Enter the name for the new object class:',
+            inputPlaceholder: 'e.g. Tree, Building, etc.',
+            confirmText: 'Add Class',
             onConfirm: (name) => {
-                const newClass = {
-                    id: 0,
-                    name: name,
-                    color: YoloHelper.generateColor(0)
-                };
-                const newClasses = [newClass];
-                
-                // Update classes and reassign the pending box
-                const newAnnotations = state.data.annotations.map(box => 
-                    box.id === boxId ? { ...box, classId: 0 } : box
-                );
-
-                state.set({ 
-                    classes: newClasses,
-                    selectedClassId: 0,
-                    annotations: newAnnotations
-                });
-                
+                if (!name) return;
+                const newId = state.data.classes.length > 0 ? Math.max(...state.data.classes.map(c => c.id)) + 1 : 0;
+                const newClasses = [...state.data.classes, { id: newId, name, color: YoloHelper.generateColor(newId) }];
+                state.set({ classes: newClasses, selectedClassId: newId });
                 this.saveClasses(newClasses);
             }
         });
     }
 
-    handleAddClass() {
-        try {
-            if (!state.data.folderHandle) {
-                this.updateStatus('❌ Open a folder first', true);
-                return;
+    promptForFirstClass(e) {
+        const boxId = e.detail?.boxId;
+        this.showModal({
+            title: 'Welcome to VisionTag',
+            message: 'To start labeling, please define your first object class:',
+            inputPlaceholder: 'e.g. Car, Dog, etc.',
+            confirmText: 'Define Class',
+            onConfirm: (name) => {
+                if (!name) return;
+                const newClasses = [{ id: 0, name, color: YoloHelper.generateColor(0) }];
+                let annotations = state.data.annotations;
+                if (boxId) annotations = annotations.map(b => b.id === boxId ? { ...b, classId: 0 } : b);
+                state.set({ classes: newClasses, selectedClassId: 0, annotations });
+                this.saveClasses(newClasses);
             }
-
-            const newId = state.data.classes.length;
-            const newClass = {
-                id: newId,
-                name: `class_${newId}`,
-                color: YoloHelper.generateColor(newId)
-            };
-
-            const newClasses = [...state.data.classes, newClass];
-            
-            state.set({ 
-                classes: newClasses,
-                selectedClassId: newId 
-            });
-            
-            this.saveClasses(newClasses);
-            
-            const nameSpans = this.dom.classList.querySelectorAll('.class-name');
-            const lastSpan = nameSpans[nameSpans.length - 1];
-            if (lastSpan) {
-                lastSpan.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-            }
-        } catch (err) {
-            this.updateStatus(`❌ Failed to add class: ${err.message}`, true);
-        }
+        });
     }
 
     async saveClasses(classes) {
@@ -656,33 +497,22 @@ class App {
             const writable = await fileHandle.createWritable();
             await writable.write(content);
             await writable.close();
-            this.updateStatus('Classes saved to disk');
-        } catch (err) {
-            console.error('Failed to save classes:', err);
-        }
+        } catch (err) { console.error('Failed to save classes:', err); }
     }
 
     updateImageSelection(index) {
-        const items = this.dom.imageList.querySelectorAll('.image-item');
-        items.forEach((item, idx) => {
-            const isActive = idx === index;
-            item.classList.toggle('active', isActive);
-            if (isActive) {
-                item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
+        this.dom.imageList.querySelectorAll('.image-item').forEach((item, idx) => {
+            item.classList.toggle('active', idx === index);
+            if (idx === index) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     }
 
     updateClassSelection(selectedId) {
-        this.dom.classList.querySelectorAll('.class-item').forEach(item => {
-            item.classList.toggle('active', parseInt(item.dataset.id) === selectedId);
-        });
+        this.dom.classList.querySelectorAll('.class-item').forEach(item => item.classList.toggle('active', parseInt(item.dataset.id) === selectedId));
     }
 
     updateAnnotationSelection(selectedId) {
-        this.dom.annotationList.querySelectorAll('.anno-item').forEach(item => {
-            item.classList.toggle('active', parseInt(item.dataset.id) === selectedId);
-        });
+        this.dom.annotationList.querySelectorAll('.anno-item').forEach(item => item.classList.toggle('active', parseInt(item.dataset.id) === selectedId));
     }
 
     renderAnnotationList(annotations, selectedId) {
@@ -691,49 +521,26 @@ class App {
             this.dom.annotationList.innerHTML = '<div class="empty-state-small">No annotations yet</div>';
             return;
         }
-
         this.dom.annotationList.innerHTML = annotations.map(box => {
             const currentCls = classes.find(c => c.id === box.classId);
-            const classColor = currentCls ? currentCls.color : '#ffffff';
-            
             return `
                 <div class="anno-item ${box.id === selectedId ? 'active' : ''}" data-id="${box.id}">
-                    <span class="anno-color" style="background-color: ${classColor}"></span>
+                    <span class="anno-color" style="background-color: ${currentCls?.color || '#ffffff'}"></span>
                     <select class="anno-class-select" data-box-id="${box.id}">
-                        ${classes.map(cls => `
-                            <option value="${cls.id}" ${cls.id === box.classId ? 'selected' : ''}>
-                                ${cls.name}
-                            </option>
-                        `).join('')}
+                        ${classes.map(cls => `<option value="${cls.id}" ${cls.id === box.classId ? 'selected' : ''}>${cls.name}</option>`).join('')}
                         ${!currentCls ? '<option value="-1" selected disabled>Pending...</option>' : ''}
                     </select>
                     <span class="anno-coords">${Math.round(box.x)}, ${Math.round(box.y)}</span>
                 </div>
             `;
         }).join('');
-
-        // Handle selection and class switching
         this.dom.annotationList.querySelectorAll('.anno-item').forEach(item => {
             const boxId = parseInt(item.dataset.id);
-            const select = item.querySelector('.anno-class-select');
-
-            item.addEventListener('click', (e) => {
-                if (e.target.tagName !== 'SELECT') {
-                    state.set({ selectedBoxId: boxId });
-                }
-            });
-
-            select.addEventListener('change', (e) => {
-                e.stopPropagation(); // Prevent parent click
-                const newClassId = parseInt(e.target.value);
-                const newAnnotations = state.data.annotations.map(box => 
-                    box.id === boxId ? { ...box, classId: newClassId } : box
-                );
+            item.addEventListener('click', (e) => { if (e.target.tagName !== 'SELECT') state.set({ selectedBoxId: boxId }); });
+            item.querySelector('.anno-class-select').addEventListener('change', (e) => {
+                const newAnnotations = state.data.annotations.map(box => box.id === boxId ? { ...box, classId: parseInt(e.target.value) } : box);
                 state.set({ annotations: newAnnotations, selectedBoxId: boxId });
-                this.updateStatus(`Updated box to ${classes.find(c => c.id === newClassId)?.name}`);
             });
-
-            select.addEventListener('click', (e) => e.stopPropagation());
         });
     }
 
@@ -741,10 +548,7 @@ class App {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = '.onnx';
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (file) ai.loadModel(file);
-        };
+        input.onchange = (e) => { if (e.target.files[0]) ai.loadModel(e.target.files[0]); };
         input.click();
     }
 
@@ -753,11 +557,15 @@ class App {
             this.updateStatus('❌ Open a folder first', true);
             return;
         }
+        this.showModal({
+            title: 'AI Auto-Label Confirmation',
+            message: '🤖 VISIONTAG AI: This will process the ENTIRE dataset using the current model. Proceed?',
+            confirmText: 'Start Labeling',
+            onConfirm: () => this.startAutoLabelBatch()
+        });
+    }
 
-        const confirmMsg = "🤖 VISIONTAG AI: This will process the ENTIRE dataset using the current model. \n\nExisting annotations will be overwritten if AI finds new objects. Proceed?";
-        if (!confirm(confirmMsg)) return;
-
-        // Show progress overlay
+    async startAutoLabelBatch() {
         const overlay = document.createElement('div');
         overlay.className = 'progress-overlay';
         overlay.innerHTML = `
@@ -765,68 +573,76 @@ class App {
                 <h3>AI is labeling your dataset...</h3>
                 <div class="progress-bar"><div id="ai-progress-fill" class="progress-fill"></div></div>
                 <p id="ai-progress-text">0 / ${state.data.images.length} images</p>
-                <button id="btn-cancel-ai" class="btn btn-secondary" style="margin-top: 20px;">Cancel</button>
+                <button id="btn-cancel-ai" class="btn btn-secondary" style="margin-top: 20px;">Cancel Task</button>
             </div>
         `;
         this.dom.workspace.appendChild(overlay);
-
         let cancelled = false;
         overlay.querySelector('#btn-cancel-ai').onclick = () => { cancelled = true; };
-
         const images = state.data.images;
-        const progressFill = overlay.querySelector('#ai-progress-fill');
-        const progressText = overlay.querySelector('#ai-progress-text');
-
+        const fill = overlay.querySelector('#ai-progress-fill');
+        const text = overlay.querySelector('#ai-progress-text');
         state.set({ isAutoLabeling: true });
-
         for (let i = 0; i < images.length; i++) {
             if (cancelled) break;
-
-            const imgInfo = images[i];
-            progressText.textContent = `${i + 1} / ${images.length} : Processing ${imgInfo.name}...`;
-            progressFill.style.width = `${((i + 1) / images.length) * 100}%`;
-
+            text.textContent = `${i + 1} / ${images.length} : Processing ${images[i].name}...`;
+            fill.style.width = `${((i + 1) / images.length) * 100}%`;
             try {
-                // 1. Load bitmap
-                const file = await imgInfo.handle.getFile();
+                const file = await images[i].handle.getFile();
                 const bitmap = await createImageBitmap(file);
-
+                
+                // 1. Load existing annotations to merge (Elite requirement: Preserve Work)
+                const existingAnnotations = await this.loadAnnotations(images[i].name, bitmap);
+                
                 // 2. Run Inference
                 const predictions = await ai.predict(bitmap);
 
-                // 3. Convert to YOLO format and Save
                 if (predictions.length > 0) {
-                    // Map AI classes to project classes
-                    const mappedPredictions = predictions.map(p => {
-                        const aiClassName = ai.cocoClasses[p.classId] || `class_${p.classId}`;
-                        // Find matching class in our project (case-insensitive)
-                        let projectClass = state.data.classes.find(c => c.name.toLowerCase() === aiClassName.toLowerCase());
+                    const currentClasses = [...state.data.classes];
+                    let classesChanged = false;
+
+                    const mapped = predictions.map(p => {
+                        const aiName = ai.cocoClasses[p.classId] || `class_${p.classId}`;
+                        let projectClass = currentClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
                         
-                        // If not found and it's the bundled model, maybe create it?
-                        // For now, if not found, we fallback to the first project class
-                        return {
-                            ...p,
-                            classId: projectClass ? projectClass.id : (state.data.classes[0]?.id || 0)
-                        };
+                        if (!projectClass) {
+                            const newId = currentClasses.length > 0 ? Math.max(...currentClasses.map(c => c.id)) + 1 : 0;
+                            projectClass = {
+                                id: newId,
+                                name: aiName,
+                                color: YoloHelper.generateColor(newId)
+                            };
+                            currentClasses.push(projectClass);
+                            classesChanged = true;
+                        }
+                        return { ...p, classId: projectClass.id };
                     });
+                    
+                    if (classesChanged) {
+                        state.set({ classes: currentClasses });
+                        await this.saveClasses(currentClasses);
+                    }
 
-                    await this.saveAnnotations(i, mappedPredictions, bitmap);
-                    imgInfo.status = 'labeled';
+                    const merged = [...existingAnnotations, ...mapped];
+                    console.log(`🖼️ Image ${i}: ${mapped.length} AI boxes merged with ${existingAnnotations.length} existing.`);
+                    
+                    await this.saveAnnotations(i, merged, bitmap);
+                    
+                    if (i === state.data.currentImageIndex) {
+                        state.set({ annotations: merged });
+                        // Force canvas engine to recognize update
+                        if (this.canvasEngine) this.canvasEngine.draw();
+                    }
+                    images[i].status = 'labeled';
+                } else {
+                    console.log(`⚪ Image ${i}: No AI detections found.`);
                 }
-            } catch (err) {
-                console.error(`Failed to auto-label ${imgInfo.name}:`, err);
-            }
+            } catch (err) { console.error(`Failed to auto-label ${images[i].name}:`, err); }
         }
-
         overlay.remove();
         state.set({ isAutoLabeling: false });
-        this.renderImageList(state.data.images);
-        
-        // Refresh current image if we labeled it
-        if (state.data.currentImageIndex !== -1) {
-            this.loadImage(state.data.currentImageIndex);
-        }
-        
+        this.renderImageList(images);
+        if (state.data.currentImageIndex !== -1) this.loadImage(state.data.currentImageIndex);
         this.updateStatus(cancelled ? '⚠️ AI Batch Cancelled' : '✅ AI Batch Complete');
     }
 
@@ -836,5 +652,4 @@ class App {
     }
 }
 
-// Start the app
 new App();
