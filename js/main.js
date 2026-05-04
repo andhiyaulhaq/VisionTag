@@ -253,7 +253,7 @@ class App {
                 }
             }
 
-            images.sort((a, b) => a.name.localeCompare(b.name));
+            images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
             state.set({
                 folderHandle: handle,
