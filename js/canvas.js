@@ -66,6 +66,8 @@ export class CanvasEngine {
                 if (!state.data.isPanning) {
                     state.set({ isPanning: true });
                     this.canvas.style.cursor = 'grab';
+                    document.getElementById('crosshair-v').classList.add('hidden');
+                    document.getElementById('crosshair-h').classList.add('hidden');
                 }
             }
         });
@@ -151,14 +153,6 @@ export class CanvasEngine {
     onMouseMove(e) {
         const { x, y } = this.getMousePos(e);
         const imgPos = this.screenToImage(x, y);
-
-        // Panning
-        if (state.data.isPanning) {
-            const dx = e.clientX - this.lastMousePos.x;
-            const dy = e.clientY - this.lastMousePos.y;
-            state.set({ pan: { x: state.data.pan.x + dx, y: state.data.pan.y + dy } });
-            this.lastMousePos = { x: e.clientX, y: e.clientY };
-        }
 
         // Box Interaction
         if (this.interaction) {
@@ -384,7 +378,7 @@ export class CanvasEngine {
         const vLine = document.getElementById('crosshair-v');
         const hLine = document.getElementById('crosshair-h');
 
-        if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height) {
+        if (x >= 0 && x <= rect.width && y >= 0 && y <= rect.height && !state.data.isPanning) {
             vLine.classList.remove('hidden');
             hLine.classList.remove('hidden');
             vLine.style.left = `${x}px`;
