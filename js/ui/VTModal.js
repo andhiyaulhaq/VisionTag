@@ -20,6 +20,7 @@ export class VTModal extends BaseComponent {
         this._onConfirm = onConfirm;
         this._onCancel = onCancel;
         
+        this.render();
         this.classList.remove('hidden');
         
         const input = this.querySelector('.modal-input');
@@ -49,8 +50,11 @@ export class VTModal extends BaseComponent {
         const confirmText = this.getAttribute('confirm-text') || 'Confirm';
         const cancelText = this.getAttribute('cancel-text') || 'Cancel';
 
+        // Elite logic: Auto-detect danger mode
+        const isDanger = /delete|purge|irreversible|critical|nuclear|🚨|☢️/i.test(title + message);
+
         this.setHTML(`
-            <div class="modal-card">
+            <div class="modal-card ${isDanger ? 'danger' : ''}">
                 <h2 class="modal-title">${title}</h2>
                 <div class="modal-body">
                     <p class="modal-message">${message}</p>
@@ -58,7 +62,7 @@ export class VTModal extends BaseComponent {
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary modal-cancel">${cancelText}</button>
-                    <button class="btn btn-primary modal-confirm">${confirmText}</button>
+                    <button class="btn ${isDanger ? 'btn-danger' : 'btn-primary'} modal-confirm">${confirmText}</button>
                 </div>
             </div>
         `);

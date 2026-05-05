@@ -411,9 +411,9 @@ class App {
         const cls = state.data.classes.find(c => c.id === id);
         if (!cls) return;
         this.showModal({
-            title: 'Delete Class',
-            message: `🚨 WARNING: This will remove ALL annotations of type "${cls.name}" from EVERY image. This cannot be undone. Proceed?`,
-            confirmText: 'Delete Permanently',
+            title: 'Delete Class Definition',
+            message: `⚠️ DATA INTEGRITY ALERT: Deleting the "${cls.name}" class will permanently remove all associated bounding boxes across your entire dataset. This operation also triggers a class ID re-index. Are you certain?`,
+            confirmText: 'Delete & Re-index',
             cancelText: 'Keep Class',
             onConfirm: () => this.performDeleteClassMigration(id, cls.name)
         });
@@ -462,10 +462,10 @@ class App {
 
     handleAddClass() {
         this.showModal({
-            title: 'Add New Class',
-            message: 'Enter the name for the new object class:',
-            inputPlaceholder: 'e.g. Tree, Building, etc.',
-            confirmText: 'Add Class',
+            title: 'Define New Class',
+            message: 'Please specify a unique identifier for your new object category. This will be added to your classes.txt schema:',
+            inputPlaceholder: 'e.g. Building, Tree, Pedestrian...',
+            confirmText: 'Add to Schema',
             onConfirm: (name) => {
                 if (!name) return;
                 const newId = state.data.classes.length > 0 ? Math.max(...state.data.classes.map(c => c.id)) + 1 : 0;
@@ -479,10 +479,10 @@ class App {
     promptForFirstClass(e) {
         const boxId = e.detail?.boxId;
         this.showModal({
-            title: 'Welcome to VisionTag',
-            message: 'To start labeling, please define your first object class:',
-            inputPlaceholder: 'e.g. Car, Dog, etc.',
-            confirmText: 'Define Class',
+            title: 'Initialize Workspace',
+            message: 'Welcome to VisionTag. To begin labeling, please define your primary object class. This will serve as the initial category for your dataset.',
+            inputPlaceholder: 'e.g. Car, Dog, License Plate...',
+            confirmText: 'Initialize Class',
             onConfirm: (name) => {
                 if (!name) return;
                 const newClasses = [{ id: 0, name, color: YoloHelper.generateColor(0) }];
@@ -551,10 +551,10 @@ class App {
 
     async handleClearAllAnnotations() {
         this.showModal({
-            title: 'Clear All Annotations',
-            message: '🚨 CRITICAL: This will permanently DELETE all annotations in this dataset. This action cannot be undone. Are you absolutely sure?',
-            confirmText: 'Delete All',
-            cancelText: 'Cancel',
+            title: 'System Alert: Irreversible Deletion',
+            message: '🚨 CRITICAL: You are about to purge ALL annotation data from the current directory. Every label file will be deleted. This action is final and CANNOT be recovered. Proceed?',
+            confirmText: 'Purge All Data',
+            cancelText: 'Abort',
             onConfirm: async () => {
                 try {
                     state.set({ loading: true, statusMessage: '🗑️ Clearing annotations...' });
@@ -604,9 +604,9 @@ class App {
             return;
         }
         this.showModal({
-            title: 'AI Auto-Label Confirmation',
-            message: '🤖 VISIONTAG AI: This will process the ENTIRE dataset using the current model. Proceed?',
-            confirmText: 'Start Labeling',
+            title: 'AI Batch Inference Confirmation',
+            message: '🤖 VISIONTAG AI: You are initiating a batch processing task. The current model will scan every image to automatically generate bounding boxes. Continue?',
+            confirmText: 'Start AI Task',
             onConfirm: () => this.startAutoLabelBatch()
         });
     }
