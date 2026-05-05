@@ -10,6 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap"
         rel="stylesheet">
+    <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="stylesheet" href="./css/style.css">
 </head>
 
@@ -18,71 +19,31 @@
         <!-- Header / Toolbar -->
         <header class="app-header">
             <div class="logo">
-                <span class="logo-icon">V</span>
-                <span class="logo-text">Vision<span>Tag</span></span>
+                <img src="/logo-horizontal.png" alt="VisionTag" class="logo-img">
             </div>
             <div class="toolbar-center">
-                <button id="btn-select" class="tool-btn active" title="Select (V)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
-                        <path d="m13 13 6 6" />
-                    </svg>
-                </button>
-                <button id="btn-draw" class="tool-btn" title="Draw Box (W)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect width="18" height="18" x="3" y="3" rx="2" />
-                        <path d="M3 9h18" />
-                        <path d="M9 3v18" />
-                    </svg>
-                </button>
+                <vt-button id="btn-select" class="tool-btn active" title="Select (V)" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 3 7.07 16.97 2.51-7.39 7.39-2.51L3 3z" /><path d="m13 13 6 6" /></svg>'></vt-button>
+                <vt-button id="btn-draw" class="tool-btn" title="Draw Box (W)" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M9 3v18" /></svg>'></vt-button>
                 <div class="divider"></div>
-                <button id="btn-prev" class="tool-btn" title="Previous (A)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m15 18-6-6 6-6" />
-                    </svg>
-                </button>
+                <vt-button id="btn-prev" class="tool-btn" title="Previous (A)" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></svg>'></vt-button>
                 <span id="image-counter">0 / 0</span>
-                <button id="btn-next" class="tool-btn" title="Next (D)">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="m9 18 6-6-6-6" />
-                    </svg>
-                </button>
+                <vt-button id="btn-next" class="tool-btn" title="Next (D)" icon='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6" /></svg>'></vt-button>
             </div>
             <div class="toolbar-right">
-                <button id="btn-open" class="btn btn-secondary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-                    </svg>
-                    Open Folder
-                </button>
-                <button id="btn-export" class="btn btn-primary">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" x2="12" y1="15" y2="3" />
-                    </svg>
-                    Export YOLO
-                </button>
+                <vt-button id="btn-open" variant="secondary" icon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" /></svg>'>Open Folder</vt-button>
+                <vt-button id="btn-export" variant="primary" icon='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>'>Export YOLO</vt-button>
             </div>
         </header>
 
         <main class="app-content">
             <!-- Left Sidebar: Explorer -->
             <aside class="sidebar-left">
-                <div class="sidebar-header">
-                    <h3>Explorer</h3>
-                    <span id="file-count" class="badge">0 items</span>
-                </div>
-                <div id="image-list" class="image-list">
-                    <div class="empty-state">No folder loaded</div>
-                </div>
+                <vt-sidebar-section title="Explorer">
+                    <vt-badge id="file-count" slot="action">0 items</vt-badge>
+                    <div id="image-list" class="image-list">
+                        <div class="empty-state">No folder loaded</div>
+                    </div>
+                </vt-sidebar-section>
             </aside>
 
             <!-- Center: Canvas Workspace -->
@@ -102,50 +63,30 @@
 
             <!-- Right Sidebar: Classes & Inspector -->
             <aside class="sidebar-right">
-                <div class="sidebar-section">
-                    <div class="section-header">
-                        <h3>Classes</h3>
-                        <button id="btn-add-class" class="icon-btn" title="Add Class">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                        </button>
-                    </div>
+                <vt-sidebar-section title="Classes">
+                    <vt-button id="btn-add-class" slot="action" variant="secondary" size="sm" icon='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>'></vt-button>
                     <div id="class-list" class="class-list">
                         <!-- Classes will be injected here -->
                     </div>
-                </div>
+                </vt-sidebar-section>
 
-                <div class="sidebar-section ai-section">
-                    <div class="section-header">
-                        <h3>AI Assistant</h3>
-                        <span id="model-status-badge" class="badge status-idle">Idle</span>
-                    </div>
+                <vt-sidebar-section title="AI Assistant" class="ai-section">
+                    <vt-badge id="model-status-badge" slot="action" variant="warning">Idle</vt-badge>
                     <div class="ai-controls">
-                        <button id="btn-load-model" class="btn btn-outline btn-full">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                            Load Custom Model
-                        </button>
-                        <button id="btn-auto-label-all" class="btn btn-primary btn-full" disabled title="Load a model first">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4-4-4"/><path d="M3 3.41V21h11.81"/><path d="m13 15 4-4-4-4"/><path d="M3 13h14"/></svg>
-                            Auto-Label Dataset
-                        </button>
+                        <vt-button id="btn-load-model" variant="outline" class="btn-full" icon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>'>Load Custom Model</vt-button>
+                        <vt-button id="btn-auto-label-all" variant="primary" class="btn-full" disabled title="Load a model first" icon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4-4-4"/><path d="M3 3.41V21h11.81"/><path d="m13 15 4-4-4-4"/><path d="M3 13h14"/></svg>'>Auto-Label Dataset</vt-button>
                         <p id="ai-model-name" class="ai-info">Using Default: YOLOv8n</p>
                     </div>
-                </div>
+                </vt-sidebar-section>
 
-                <div class="sidebar-section box-inspector">
-                    <div class="section-header">
-                        <h3>Annotations</h3>
-                        <span id="box-count" class="badge">0</span>
-                    </div>
+                <vt-sidebar-section title="Annotations">
+                    <vt-badge id="box-count" slot="action">0</vt-badge>
                     <div id="annotation-list" class="annotation-list">
                         <div class="empty-state-small">No annotations yet</div>
                     </div>
-                </div>
+                </vt-sidebar-section>
 
-                <div class="sidebar-section hotkeys-tip">
-                    <div class="section-header">
-                        <h3>Hotkeys</h3>
-                    </div>
+                <vt-sidebar-section title="Hotkeys" class="hotkeys-tip">
                     <ul class="hotkey-list">
                         <li><span>Draw Mode</span> <kbd>W</kbd></li>
                         <li><span>Select Mode</span> <kbd>V</kbd></li>
@@ -154,7 +95,7 @@
                         <li><span>Delete Box</span> <kbd>Del</kbd></li>
                         <li><span>Pan View</span> <kbd>Space</kbd></li>
                     </ul>
-                </div>
+                </vt-sidebar-section>
             </aside>
         </main>
 
@@ -168,19 +109,7 @@
         </footer>
         
         <!-- Custom Modal System -->
-        <div id="modal-container" class="modal-overlay hidden">
-            <div class="modal-card">
-                <h2 id="modal-title">New Class</h2>
-                <div class="modal-body">
-                    <p id="modal-message" class="modal-message">Please name your first class to begin labeling:</p>
-                    <input type="text" id="modal-input" class="modal-input" placeholder="e.g. Car, Dog, etc.">
-                </div>
-                <div class="modal-footer">
-                    <button id="modal-cancel" class="btn btn-secondary">Cancel</button>
-                    <button id="modal-confirm" class="btn btn-primary">Create Class</button>
-                </div>
-            </div>
-        </div>
+        <vt-modal id="app-modal"></vt-modal>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js"></script>
     <script type="module" src="./js/main.js"></script>

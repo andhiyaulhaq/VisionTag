@@ -3,6 +3,12 @@ import { CanvasEngine } from './canvas.js';
 import { YoloHelper } from './yolo.js';
 import { ai } from './ai.js';
 
+// Import UI Components
+import './ui/VTButton.js';
+import './ui/VTBadge.js';
+import './ui/VTSidebarSection.js';
+import './ui/VTModal.js';
+
 /**
  * VisionTag Main Entry Point
  */
@@ -16,7 +22,7 @@ class App {
         this.initGlobalErrorHandling();
         
         // Load default model
-        ai.loadModel('./assets/model/yolov8n.onnx');
+        ai.loadModel('/assets/model/yolov8n.onnx');
 
         console.log('🚀 VisionTag Initialized');
     }
@@ -64,12 +70,7 @@ class App {
             zoomDisplay: document.getElementById('zoom-display'),
             btnAddClass: document.getElementById('btn-add-class'),
             
-            modal: document.getElementById('modal-container'),
-            modalTitle: document.getElementById('modal-title'),
-            modalMessage: document.getElementById('modal-message'),
-            modalInput: document.getElementById('modal-input'),
-            modalConfirm: document.getElementById('modal-confirm'),
-            modalCancel: document.getElementById('modal-cancel'),
+            modal: document.getElementById('app-modal'),
 
             btnLoadModel: document.getElementById('btn-load-model'),
             btnAutoLabelAll: document.getElementById('btn-auto-label-all'),
@@ -427,36 +428,8 @@ class App {
         }
     }
 
-    showModal({ title, message, inputPlaceholder = '', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel }) {
-        this.dom.modalTitle.textContent = title;
-        this.dom.modalMessage.textContent = message;
-        this.dom.modalConfirm.textContent = confirmText;
-        this.dom.modalCancel.textContent = cancelText;
-        
-        if (inputPlaceholder) {
-            this.dom.modalInput.classList.remove('hidden');
-            this.dom.modalInput.placeholder = inputPlaceholder;
-            this.dom.modalInput.value = '';
-            setTimeout(() => this.dom.modalInput.focus(), 100);
-        } else {
-            this.dom.modalInput.classList.add('hidden');
-        }
-        this.dom.modal.classList.remove('hidden');
-        const newConfirm = this.dom.modalConfirm.cloneNode(true);
-        this.dom.modalConfirm.replaceWith(newConfirm);
-        this.dom.modalConfirm = newConfirm;
-        const newCancel = this.dom.modalCancel.cloneNode(true);
-        this.dom.modalCancel.replaceWith(newCancel);
-        this.dom.modalCancel = newCancel;
-        this.dom.modalConfirm.onclick = () => {
-            const value = this.dom.modalInput.value.trim();
-            this.dom.modal.classList.add('hidden');
-            if (onConfirm) onConfirm(value);
-        };
-        this.dom.modalCancel.onclick = () => {
-            this.dom.modal.classList.add('hidden');
-            if (onCancel) onCancel();
-        };
+    showModal(options) {
+        this.dom.modal.show(options);
     }
 
     handleAddClass() {
