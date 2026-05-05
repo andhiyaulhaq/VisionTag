@@ -526,6 +526,15 @@ canvas {
     gap: 10px;
 }
 
+.hotkey-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
 .hotkey-list li {
     display: flex;
     align-items: center;
