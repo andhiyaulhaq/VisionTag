@@ -60,14 +60,19 @@ export class CanvasEngine {
 
         // Spacebar Panning
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && e.target === document.body) {
+            if (e.code === 'Space') {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
                 e.preventDefault();
-                state.set({ isPanning: true });
+                if (!state.data.isPanning) {
+                    state.set({ isPanning: true });
+                    this.canvas.style.cursor = 'grab';
+                }
             }
         });
         window.addEventListener('keyup', (e) => {
             if (e.code === 'Space') {
                 state.set({ isPanning: false });
+                this.canvas.style.cursor = state.data.mode === 'draw' ? 'crosshair' : 'default';
             }
         });
     }
