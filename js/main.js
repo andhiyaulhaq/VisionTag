@@ -60,6 +60,7 @@ class App {
             btnSelect: document.getElementById('btn-select'),
             btnPrev: document.getElementById('btn-prev'),
             btnNext: document.getElementById('btn-next'),
+            btnExport: document.getElementById('btn-export'),
             imageCounter: document.getElementById('image-counter'),
             fileCountBadge: document.getElementById('file-count'),
             imageList: document.getElementById('image-list'),
@@ -154,7 +155,9 @@ class App {
             if (data.mode !== oldData.mode) {
                 this.dom.btnDraw.classList.toggle('active', data.mode === 'draw');
                 this.dom.btnSelect.classList.toggle('active', data.mode === 'select');
-                this.updateStatus(`Mode: ${data.mode.toUpperCase()}`);
+                if (data.mode) {
+                    this.updateStatus(`Mode: ${data.mode.toUpperCase()}`);
+                }
             }
 
             if (data.images.length !== oldData.images.length || data.currentImageIndex !== oldData.currentImageIndex) {
@@ -191,10 +194,25 @@ class App {
                 document.getElementById('loading-overlay').classList.toggle('hidden', !data.loading);
             }
 
-            if (data.modelStatus !== oldData.modelStatus) {
+            // Always update model status badge
+            if (this.dom.modelStatusBadge) {
                 this.dom.modelStatusBadge.className = `badge status-${data.modelStatus}`;
                 this.dom.modelStatusBadge.textContent = data.modelStatus.toUpperCase();
-                this.dom.btnAutoLabelAll.disabled = data.modelStatus !== 'ready';
+            }
+            
+            // Always update button states based on folder presence
+            const isFolderLoaded = !!data.folderHandle;
+            if (this.dom.btnSelect) this.dom.btnSelect.disabled = !isFolderLoaded;
+            if (this.dom.btnDraw) this.dom.btnDraw.disabled = !isFolderLoaded;
+            if (this.dom.btnPrev) this.dom.btnPrev.disabled = !isFolderLoaded;
+            if (this.dom.btnNext) this.dom.btnNext.disabled = !isFolderLoaded;
+            if (this.dom.btnExport) this.dom.btnExport.disabled = !isFolderLoaded;
+            if (this.dom.btnAddClass) this.dom.btnAddClass.disabled = !isFolderLoaded;
+            if (this.dom.btnLoadModel) this.dom.btnLoadModel.disabled = !isFolderLoaded;
+
+            // Model status still controls auto-label, but only if folder is loaded
+            if (this.dom.btnAutoLabelAll) {
+                this.dom.btnAutoLabelAll.disabled = data.modelStatus !== 'ready' || !isFolderLoaded;
             }
             if (data.aiModel?.name !== oldData.aiModel?.name) {
                 this.dom.aiModelName.textContent = data.aiModel ? `Using: ${data.aiModel.name}` : 'No model loaded';
@@ -256,7 +274,14 @@ class App {
                 }
             }
             images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-            state.set({ folderHandle: handle, labelFolderHandle: labelHandle, images, currentImageIndex: images.length > 0 ? 0 : -1, loading: false });
+            state.set({ 
+                folderHandle: handle, 
+                labelFolderHandle: labelHandle, 
+                images, 
+                currentImageIndex: images.length > 0 ? 0 : -1, 
+                loading: false,
+                mode: 'select'
+            });
             this.updateStatus(`Loaded ${images.length} images`);
             this.renderImageList(images);
         } catch (err) {

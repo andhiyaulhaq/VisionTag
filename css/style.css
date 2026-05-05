@@ -301,6 +301,14 @@ canvas {
     transform: scale(0.96);
 }
 
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(0.5);
+    transform: none !important;
+    pointer-events: none;
+}
+
 .btn-sm {
     padding: 6px 10px;
     font-size: 0.75rem;

@@ -67,8 +67,13 @@ export class VTButton extends BaseComponent {
     }
 
     set disabled(val) {
-        if (val) this.setAttribute('disabled', '');
-        else this.removeAttribute('disabled');
+        if (val) {
+            this.setAttribute('disabled', '');
+            this.style.pointerEvents = 'none';
+        } else {
+            this.removeAttribute('disabled');
+            this.style.pointerEvents = '';
+        }
     }
 }
 
