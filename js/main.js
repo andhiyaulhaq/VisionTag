@@ -195,8 +195,22 @@ class App {
 
             // Always update model status badge
             if (this.dom.modelStatusBadge) {
-                this.dom.modelStatusBadge.className = `badge status-${data.modelStatus}`;
-                this.dom.modelStatusBadge.textContent = data.modelStatus.toUpperCase();
+                const badge = this.dom.modelStatusBadge;
+                badge.className = "px-2 py-0.5 rounded-full text-[0.7rem] border transition-all";
+                
+                if (data.modelStatus === 'idle') {
+                    badge.classList.add("bg-gray-500/20", "text-gray-400", "border-gray-500/30");
+                    badge.textContent = "Idle";
+                } else if (data.modelStatus === 'loading') {
+                    badge.classList.add("bg-yellow-500/20", "text-yellow-500", "border-yellow-500/30", "animate-pulse");
+                    badge.textContent = "Loading...";
+                } else if (data.modelStatus === 'ready') {
+                    badge.classList.add("bg-green-500/20", "text-green-500", "border-green-500/30");
+                    badge.textContent = "Ready";
+                } else if (data.modelStatus === 'error') {
+                    badge.classList.add("bg-red-500/20", "text-red-500", "border-red-500/30");
+                    badge.textContent = "Error";
+                }
             }
             
             // Always update button states based on folder presence
@@ -341,9 +355,9 @@ class App {
             return;
         }
         this.dom.imageList.innerHTML = images.map((img, idx) => `
-            <div class="image-item ${idx === state.data.currentImageIndex ? 'active' : ''}" data-index="${idx}">
-                <span class="img-name">${img.name}</span>
-                <span class="status-dot ${img.status}"></span>
+            <div class="image-item group flex items-center justify-between p-2 rounded-lg text-[0.8rem] cursor-pointer transition-all gap-2.5 ${idx === state.data.currentImageIndex ? 'bg-(--accent)/15 text-(--accent-light) font-semibold shadow-sm' : 'text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)'}" data-index="${idx}">
+                <span class="truncate flex-1">${img.name}</span>
+                ${img.status === 'labeled' ? '<span class="w-1.5 h-1.5 rounded-full bg-(--success) shadow-[0_0_8px_var(--success)]"></span>' : ''}
             </div>
         `).join('');
         this.dom.imageList.querySelectorAll('.image-item').forEach(item => {
@@ -353,11 +367,11 @@ class App {
 
     renderClassList(classes, selectedId) {
         this.dom.classList.innerHTML = classes.map(cls => `
-            <div class="class-item ${cls.id === selectedId ? 'active' : ''}" data-id="${cls.id}">
-                <span class="class-color" style="background-color: ${cls.color}"></span>
-                <span class="class-name" title="Double-click to rename">${cls.name}</span>
-                <span class="class-id">${cls.id}</span>
-                <button class="btn-delete-class" title="Delete Class">&times;</button>
+            <div class="class-item group flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${cls.id === selectedId ? 'bg-(--accent)/15 border-(--accent) text-(--text-primary) shadow-sm' : 'border-transparent text-(--text-secondary) hover:bg-(--bg-hover)'}" data-id="${cls.id}">
+                <span class="w-3.5 h-3.5 rounded-md shadow-sm shrink-0" style="background-color: ${cls.color}"></span>
+                <span class="class-name flex-1 font-semibold text-[0.85rem] truncate" title="Double-click to rename">${cls.name}</span>
+                <span class="text-[0.7rem] bg-(--bg-card) px-1.5 py-0.5 rounded border border-(--border) text-(--text-muted) font-mono">${cls.id}</span>
+                <button class="btn-delete-class opacity-0 group-hover:opacity-100 hover:text-red-500 hover:scale-125 transition-all text-[1.2rem] leading-none px-1" title="Delete Class">&times;</button>
             </div>
         `).join('');
         this.dom.classList.querySelectorAll('.class-item').forEach(item => {
@@ -376,7 +390,7 @@ class App {
             nameSpan.addEventListener('dblclick', () => {
                 const input = document.createElement('input');
                 input.value = nameSpan.textContent;
-                input.className = 'class-rename-input';
+                input.className = 'w-full bg-(--bg-main) text-(--text-primary) border border-(--accent) rounded px-2 py-0.5 text-[0.85rem] outline-none';
                 nameSpan.replaceWith(input);
                 input.focus();
                 const finishRename = () => {
@@ -476,8 +490,18 @@ class App {
 
         // Danger mode detection
         const isDanger = /delete|purge|irreversible|critical|nuclear|🚨|☢️/i.test(title + message);
-        confirmBtn.className = `btn modal-confirm ${isDanger ? 'btn-danger' : 'btn-primary'}`;
-        modal.querySelector('.modal-card').className = `modal-card ${isDanger ? 'danger' : ''}`;
+        
+        // Use toggle to avoid wiping out Tailwind utilities
+        confirmBtn.classList.toggle('bg-red-600', isDanger);
+        confirmBtn.classList.toggle('hover:bg-red-500', isDanger);
+        confirmBtn.classList.toggle('shadow-[0_4px_12px_rgba(220,38,38,0.3)]', isDanger);
+        confirmBtn.classList.toggle('bg-(--accent)', !isDanger);
+        
+        const card = modal.querySelector('.modal-card');
+        card.classList.toggle('border-t-red-500', isDanger);
+        card.classList.toggle('border-t-2', isDanger);
+        card.classList.toggle('border-t-white/20', !isDanger);
+        card.classList.toggle('border-t', !isDanger);
 
         modal.classList.remove('hidden');
 
@@ -540,17 +564,34 @@ class App {
 
     updateImageSelection(index) {
         this.dom.imageList.querySelectorAll('.image-item').forEach((item, idx) => {
-            item.classList.toggle('active', idx === index);
-            if (idx === index) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const isActive = idx === index;
+            item.classList.toggle('bg-(--accent)/15', isActive);
+            item.classList.toggle('text-(--accent-light)', isActive);
+            item.classList.toggle('font-semibold', isActive);
+            item.classList.toggle('shadow-sm', isActive);
+            item.classList.toggle('text-(--text-secondary)', !isActive);
+            if (isActive) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     }
 
     updateClassSelection(selectedId) {
-        this.dom.classList.querySelectorAll('.class-item').forEach(item => item.classList.toggle('active', parseInt(item.dataset.id) === selectedId));
+        this.dom.classList.querySelectorAll('.class-item').forEach(item => {
+            const isActive = parseInt(item.dataset.id) === selectedId;
+            item.classList.toggle('bg-(--accent)/15', isActive);
+            item.classList.toggle('border-(--accent)', isActive);
+            item.classList.toggle('text-(--text-primary)', isActive);
+            item.classList.toggle('shadow-sm', isActive);
+        });
     }
 
     updateAnnotationSelection(selectedId) {
-        this.dom.annotationList.querySelectorAll('.anno-item').forEach(item => item.classList.toggle('active', parseInt(item.dataset.id) === selectedId));
+        this.dom.annotationList.querySelectorAll('.anno-item').forEach(item => {
+            const isActive = parseInt(item.dataset.id) === selectedId;
+            item.classList.toggle('bg-(--bg-card)', isActive);
+            item.classList.toggle('border-(--border)', isActive);
+            item.classList.toggle('text-(--text-primary)', isActive);
+            item.classList.toggle('shadow-sm', isActive);
+        });
     }
 
     renderAnnotationList(annotations, selectedId) {
@@ -562,13 +603,13 @@ class App {
         this.dom.annotationList.innerHTML = annotations.map(box => {
             const currentCls = classes.find(c => c.id === box.classId);
             return `
-                <div class="anno-item ${box.id === selectedId ? 'active' : ''}" data-id="${box.id}">
-                    <span class="anno-color" style="background-color: ${currentCls?.color || '#ffffff'}"></span>
-                    <select class="anno-class-select" data-box-id="${box.id}">
+                <div class="anno-item group flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${box.id === selectedId ? 'bg-(--bg-card) border-(--border) text-(--text-primary) shadow-sm' : 'border-transparent text-(--text-secondary) hover:bg-(--bg-hover)'}" data-id="${box.id}">
+                    <span class="w-3.5 h-3.5 rounded-md shadow-sm shrink-0" style="background-color: ${currentCls?.color || '#ffffff'}"></span>
+                    <select class="anno-class-select flex-1 bg-transparent border-none text-(--text-primary) text-[0.85rem] outline-none cursor-pointer p-1 rounded hover:bg-(--bg-main) hover:ring-1 hover:ring-(--border)" data-box-id="${box.id}">
                         ${classes.map(cls => `<option value="${cls.id}" ${cls.id === box.classId ? 'selected' : ''}>${cls.name}</option>`).join('')}
                         ${!currentCls ? '<option value="-1" selected disabled>Pending...</option>' : ''}
                     </select>
-                    <span class="anno-coords">${Math.round(box.x)}, ${Math.round(box.y)}</span>
+                    <span class="text-[0.7rem] bg-(--bg-main) px-1.5 py-0.5 rounded text-(--text-muted) font-mono">${Math.round(box.x)}, ${Math.round(box.y)}</span>
                 </div>
             `;
         }).join('');
