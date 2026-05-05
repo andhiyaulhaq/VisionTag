@@ -165,6 +165,10 @@ aside {
     justify-content: space-between;
 }
 
+.sidebar-footer {
+    padding: 8px 0;
+}
+
 .sidebar-header h3,
 .section-header h3 {
     font-family: var(--font-heading);
@@ -295,6 +299,18 @@ canvas {
     line-height: 1;
     white-space: nowrap;
     user-select: none;
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: #ef4444;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
 }
 
 .btn:active {

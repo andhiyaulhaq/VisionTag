@@ -75,6 +75,7 @@ class App {
 
             btnLoadModel: document.getElementById('btn-load-model'),
             btnAutoLabelAll: document.getElementById('btn-auto-label-all'),
+            btnClearAll: document.getElementById('btn-clear-all'),
             modelStatusBadge: document.getElementById('model-status-badge'),
             aiModelName: document.getElementById('ai-model-name'),
             workspace: document.getElementById('workspace')
@@ -97,6 +98,7 @@ class App {
         this.dom.btnAddClass.addEventListener('click', () => this.handleAddClass());
         this.dom.btnLoadModel.addEventListener('click', () => this.handleLoadCustomModel());
         this.dom.btnAutoLabelAll.addEventListener('click', () => this.handleAutoLabelDataset());
+        this.dom.btnClearAll.addEventListener('click', () => this.handleClearAllAnnotations());
 
         window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -209,6 +211,7 @@ class App {
             if (this.dom.btnExport) this.dom.btnExport.disabled = !isFolderLoaded;
             if (this.dom.btnAddClass) this.dom.btnAddClass.disabled = !isFolderLoaded;
             if (this.dom.btnLoadModel) this.dom.btnLoadModel.disabled = !isFolderLoaded;
+            if (this.dom.btnClearAll) this.dom.btnClearAll.disabled = !isFolderLoaded;
 
             // Model status still controls auto-label, but only if folder is loaded
             if (this.dom.btnAutoLabelAll) {
@@ -543,6 +546,47 @@ class App {
                 const newAnnotations = state.data.annotations.map(box => box.id === boxId ? { ...box, classId: parseInt(e.target.value) } : box);
                 state.set({ annotations: newAnnotations, selectedBoxId: boxId });
             });
+        });
+    }
+
+    async handleClearAllAnnotations() {
+        this.showModal({
+            title: 'Clear All Annotations',
+            message: '🚨 CRITICAL: This will permanently DELETE all annotations in this dataset. This action cannot be undone. Are you absolutely sure?',
+            confirmText: 'Delete All',
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+                try {
+                    state.set({ loading: true, statusMessage: '🗑️ Clearing annotations...' });
+                    const { labelFolderHandle, images } = state.data;
+                    
+                    // Iterate through all images and delete their corresponding .txt files
+                    for (const img of images) {
+                        const txtName = img.name.replace(/\.[^/.]+$/, "") + ".txt";
+                        try {
+                            await labelFolderHandle.removeEntry(txtName);
+                        } catch (e) {
+                            // File might not exist, ignore
+                        }
+                        img.status = 'pending';
+                    }
+
+                    // Reset current view
+                    state.set({ 
+                        annotations: [], 
+                        selectedBoxId: null,
+                        loading: false 
+                    });
+
+                    this.renderImageList(images);
+                    if (this.canvasEngine) this.canvasEngine.draw();
+                    this.updateStatus('✅ All annotations cleared');
+                } catch (err) {
+                    console.error('Failed to clear annotations:', err);
+                    state.set({ loading: false });
+                    this.updateStatus('❌ Error clearing annotations', true);
+                }
+            }
         });
     }
 
