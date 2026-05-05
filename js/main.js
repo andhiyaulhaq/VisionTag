@@ -3,11 +3,8 @@ import { CanvasEngine } from './engine/canvas.js';
 import { YoloHelper } from './utils/yolo.js';
 import { ai } from './core/ai.js';
 
-// Import UI Components
-import './ui/VTButton.js';
-import './ui/VTBadge.js';
-import './ui/VTSidebarSection.js';
-import './ui/VTModal.js';
+// No longer using custom Web Components - reverting to raw HTML for Tailwind migration
+
 
 /**
  * VisionTag Main Entry Point
@@ -456,8 +453,44 @@ class App {
         }
     }
 
-    showModal(options) {
-        this.dom.modal.show(options);
+    showModal({ title, message, inputPlaceholder = '', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel }) {
+        const modal = this.dom.modal;
+        modal.querySelector('.modal-title').textContent = title;
+        modal.querySelector('.modal-message').textContent = message;
+        
+        const input = modal.querySelector('.modal-input');
+        if (inputPlaceholder) {
+            input.classList.remove('hidden');
+            input.placeholder = inputPlaceholder;
+            input.value = '';
+            setTimeout(() => input.focus(), 100);
+        } else {
+            input.classList.add('hidden');
+        }
+
+        const confirmBtn = modal.querySelector('.modal-confirm');
+        const cancelBtn = modal.querySelector('.modal-cancel');
+
+        confirmBtn.textContent = confirmText;
+        cancelBtn.textContent = cancelText;
+
+        // Danger mode detection
+        const isDanger = /delete|purge|irreversible|critical|nuclear|🚨|☢️/i.test(title + message);
+        confirmBtn.className = `btn modal-confirm ${isDanger ? 'btn-danger' : 'btn-primary'}`;
+        modal.querySelector('.modal-card').className = `modal-card ${isDanger ? 'danger' : ''}`;
+
+        modal.classList.remove('hidden');
+
+        confirmBtn.onclick = () => {
+            const val = input.value.trim();
+            modal.classList.add('hidden');
+            if (onConfirm) onConfirm(val);
+        };
+
+        cancelBtn.onclick = () => {
+            modal.classList.add('hidden');
+            if (onCancel) onCancel();
+        };
     }
 
     handleAddClass() {
