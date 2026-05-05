@@ -1,7 +1,7 @@
-import { state } from './state.js';
-import { CanvasEngine } from './canvas.js';
-import { YoloHelper } from './yolo.js';
-import { ai } from './ai.js';
+import { state } from './core/state.js';
+import { CanvasEngine } from './engine/canvas.js';
+import { YoloHelper } from './utils/yolo.js';
+import { ai } from './core/ai.js';
 
 // Import UI Components
 import './ui/VTButton.js';
