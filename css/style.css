@@ -43,76 +43,6 @@ vt-sidebar-section {
     display: contents;
 }
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: var(--font-main);
-    background-color: var(--bg-main);
-    color: var(--text-primary);
-    overflow: hidden;
-    height: 100vh;
-}
-
-#app {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-}
-
-/* --- Header --- */
-.app-header {
-    height: var(--header-height);
-    background-color: var(--bg-header);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    z-index: 100;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    height: 100%;
-    padding: 8px 0;
-}
-
-.logo-img {
-    height: 100%;
-    width: auto;
-    display: block;
-    object-fit: contain;
-}
-
-.toolbar-center {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--bg-card);
-    padding: 4px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-}
-
-.toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.divider {
-    width: 1px;
-    height: 20px;
-    background: var(--border);
-    margin: 0 4px;
-}
-
 /* --- Content Layout --- */
 .app-content {
     flex: 1;
@@ -235,8 +165,7 @@ aside {
     cursor: crosshair;
 }
 
-.dark-theme aside,
-.dark-theme .app-header {
+.dark-theme aside {
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
@@ -258,33 +187,7 @@ canvas {
 }
 
 /* --- Buttons & Tools --- */
-.tool-btn {
-    width: 36px;
-    height: 36px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
 
-.tool-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    transform: translateY(-2px);
-}
-
-.tool-btn:active,
-.tool-btn.active {
-    background: var(--accent);
-    color: white;
-    box-shadow: 0 0 15px var(--accent-glow);
-    transform: translateY(0) scale(0.95);
-}
 
 .btn {
     display: inline-flex;
@@ -606,7 +509,7 @@ canvas {
     border-top: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 20px;
     width: 440px;
-    box-shadow: 
+    box-shadow:
         0 20px 50px rgba(0, 0, 0, 0.5),
         0 0 0 1px rgba(255, 255, 255, 0.05) inset;
     padding: 32px;
@@ -617,7 +520,7 @@ canvas {
 
 .modal-card.danger {
     border-top: 2px solid var(--error);
-    box-shadow: 
+    box-shadow:
         0 20px 50px rgba(0, 0, 0, 0.5),
         0 0 30px rgba(239, 68, 68, 0.1);
 }
@@ -627,6 +530,7 @@ canvas {
         opacity: 0;
         transform: scale(0.9) translateY(30px);
     }
+
     to {
         opacity: 1;
         transform: scale(1) translateY(0);
@@ -665,13 +569,13 @@ canvas {
     margin-bottom: 24px;
     outline: none;
     transition: all 0.2s;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1) inset;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) inset;
 }
 
 .modal-input:focus {
     border-color: var(--accent);
     background: rgba(15, 17, 21, 0.8);
-    box-shadow: 0 0 0 4px var(--accent-glow), 0 2px 4px rgba(0,0,0,0.1) inset;
+    box-shadow: 0 0 0 4px var(--accent-glow), 0 2px 4px rgba(0, 0, 0, 0.1) inset;
 }
 
 .modal-footer {
