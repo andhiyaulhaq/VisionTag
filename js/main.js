@@ -2,6 +2,7 @@ import { state } from './core/state.js';
 import { CanvasEngine } from './engine/canvas.js';
 import { YoloHelper } from './utils/yolo.js';
 import { ai } from './core/ai.js';
+import './components/index.js';
 
 // No longer using custom Web Components - reverting to raw HTML for Tailwind migration
 
