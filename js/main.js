@@ -3,6 +3,7 @@ import { CanvasEngine } from './engine/canvas.js';
 import { YoloHelper } from './utils/yolo.js';
 import { ai } from './core/ai.js';
 import { ContourTracer } from './core/sam_utils.js';
+import { WelcomeModal } from './components/WelcomeModal.js';
 import './components/index.js';
 
 /**
@@ -25,7 +26,15 @@ class App {
         this._saveTimer = null;
         this.imageCache = new Map();
 
-        console.log('🚀 SharpTensor Initialized (RT-DETR + MobileSAM)');
+        // Show Welcome Experience
+        this.welcome = new WelcomeModal({
+            onOpenFolder: () => this.handleOpenFolder(),
+            onTryDemo: () => this.handleTryDemo(),
+            onGitHub: () => window.open('https://github.com/andhiyaulhaq/SharpTensor', '_blank')
+        });
+        this.welcome.render();
+
+        console.log('🚀 SharpTensor Initialized (YOLOv8 + MobileSAM)');
     }
 
     initGlobalErrorHandling() {
@@ -565,6 +574,46 @@ class App {
         } catch (err) {
             console.error('Failed to open folder:', err);
             this.updateStatus('Access denied or folder empty', true);
+        }
+    }
+
+    async handleTryDemo() {
+        try {
+            this.updateStatus('✨ Loading demo scene...');
+            const response = await fetch('/sample.jpg');
+            const blob = await response.blob();
+            const file = new File([blob], 'sample_street.jpg', { type: 'image/jpeg' });
+            
+            // Mock a folder-like structure for the demo
+            const mockImages = [{
+                name: file.name,
+                handle: { getFile: async () => file },
+                status: 'pending'
+            }];
+
+            state.set({
+                images: mockImages,
+                currentImageIndex: 0,
+                loading: false,
+                classes: [{ id: 0, name: 'Person', color: '#ff0000' }, { id: 2, name: 'Car', color: '#00ff00' }]
+            });
+
+            await this.loadImage(0);
+            this.renderImageList(mockImages);
+            
+            // Auto-trigger detection for the demo feel
+            setTimeout(async () => {
+                this.updateStatus('🎯 AI Analyzing demo scene...');
+                const bitmap = await createImageBitmap(file);
+                const results = await ai.detect(bitmap);
+                state.set({ annotations: results });
+                this.canvasEngine.draw();
+                this.updateStatus(`✅ Demo Ready: Found ${results.length} objects`);
+            }, 1000);
+
+        } catch (err) {
+            console.error('Demo failed:', err);
+            this.updateStatus('❌ Demo failed to load', true);
         }
     }
 

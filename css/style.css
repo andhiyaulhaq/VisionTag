@@ -4,7 +4,7 @@
     /* Color Palette - Nature Tech */
     --bg-main: #242C2E;
     --bg-sidebar: #1E2527;
-    --bg-header: #242C2E;
+    --bg-header: #222C2F;
     --bg-card: #2F383B;
     --bg-hover: #394448;
 
@@ -105,8 +105,15 @@ st-tool-button.active .tool-inner {
 }
 
 @keyframes dropdown-in {
-    from { opacity: 0; transform: translateY(-8px) scale(0.95); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .dropdown-item {
@@ -150,4 +157,140 @@ st-tool-button.active .tool-inner {
     background: var(--accent);
     color: var(--accent-text);
     box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* --- Welcome Experience --- */
+.welcome-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 15, 20, 0.75);
+    backdrop-filter: blur(10px);
+    opacity: 1;
+    animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.welcome-overlay.hiding {
+    animation: fadeOut 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    pointer-events: none;
+}
+
+.welcome-card {
+    width: 100%;
+    max-width: 840px;
+    background: #222C2F;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 40px;
+    padding: 64px 48px;
+    text-align: center;
+    box-shadow: 0 32px 128px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+}
+
+.welcome-card.visible {
+    opacity: 1;
+    animation: fadeIn 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.welcome-overlay.hiding .welcome-card {
+    animation: fadeOut 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.welcome-logo-container {
+    margin-bottom: 32px;
+    display: flex;
+    justify-content: center;
+}
+
+.welcome-logo {
+    height: 80px;
+    width: auto;
+}
+
+.welcome-subtitle {
+    font-size: 1.25rem;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 48px;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.6;
+}
+
+.cta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.cta-item {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 28px;
+    padding: 32px 24px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+    height: 100%;
+    /* Occupy full grid row height */
+}
+
+.cta-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--accent) !important;
+    transform: translateY(-8px);
+}
+
+.cta-icon {
+    font-size: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cta-label {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #fff;
+}
+
+.cta-desc {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.4);
+    line-height: 1.4;
+}
+
+.cta-item.primary {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+    overflow: hidden;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+
+    to {
+        opacity: 0;
+    }
 }
