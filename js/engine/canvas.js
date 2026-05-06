@@ -1,5 +1,6 @@
 import { state } from '../core/state.js';
 import { ai } from '../core/ai.js';
+import { YoloHelper } from '../utils/yolo.js';
 
 /**
  * SharpTensor Canvas Engine
@@ -635,14 +636,14 @@ export class CanvasEngine {
                 this.ctx.stroke();
                 
                 if (isSelected) {
-                    this.ctx.fillStyle = `${color}44`; // 0x44 = ~25% opacity
+                    this.ctx.fillStyle = YoloHelper.withAlpha(color, 0.25);
                     this.ctx.fill();
                 }
             } else {
                 // Standard Box
                 this.ctx.strokeRect(box.x, box.y, box.width, box.height);
                 if (isSelected) {
-                    this.ctx.fillStyle = `${color}44`;
+                    this.ctx.fillStyle = YoloHelper.withAlpha(color, 0.25);
                     this.ctx.fillRect(box.x, box.y, box.width, box.height);
                 }
             }
@@ -699,8 +700,9 @@ export class CanvasEngine {
         this.ctx.fillStyle = color;
         this.ctx.fillRect(box.x, box.y - bgHeight, bgWidth, bgHeight);
 
-        // 2. Text
-        this.ctx.fillStyle = '#fff';
+        // 2. Text (Adaptive Contrast)
+        const contrastColor = YoloHelper.getContrastColor(color);
+        this.ctx.fillStyle = contrastColor;
         this.ctx.fillText(name, box.x + padding, box.y - padding);
 
         // 3. Chevron Hint (Small downward triangle)

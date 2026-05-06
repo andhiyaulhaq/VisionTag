@@ -727,14 +727,26 @@ class App {
     }
 
     renderClassList(classes, selectedId) {
-        this.dom.classList.innerHTML = classes.map(cls => `
-            <div class="class-item group flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${cls.id === selectedId ? 'bg-(--accent)/15 border-(--accent) text-(--text-primary) shadow-sm' : 'border-transparent text-(--text-secondary) hover:bg-(--bg-hover)'}" data-id="${cls.id}">
-                <span class="w-3.5 h-3.5 rounded-md shadow-sm shrink-0" style="background-color: ${cls.color}"></span>
-                <span class="class-name flex-1 font-semibold text-[0.85rem] truncate" title="Double-click to rename">${cls.name}</span>
-                <span class="text-[0.7rem] bg-(--bg-card) px-1.5 py-0.5 rounded border border-(--border) text-(--text-muted) font-mono">${cls.id}</span>
-                <button class="btn-delete-class opacity-0 group-hover:opacity-100 hover:text-red-500 hover:scale-125 transition-all text-[1.2rem] leading-none px-1" title="Delete Class">&times;</button>
-            </div>
-        `).join('');
+        this.dom.classList.innerHTML = classes.map(cls => {
+            const isSelected = cls.id === selectedId;
+            const contrastColor = YoloHelper.getContrastColor(cls.color);
+            
+            const activeStyles = isSelected 
+                ? `background-color: ${cls.color}; color: ${contrastColor}; border-color: rgba(255,255,255,0.1); shadow-sm` 
+                : 'border-transparent text-(--text-secondary) hover:bg-(--bg-hover)';
+
+            const itemClasses = `class-item group flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all border ${isSelected ? 'shadow-sm' : 'border-transparent text-(--text-secondary) hover:bg-(--bg-hover)'}`;
+            const itemStyle = isSelected ? `background-color: ${cls.color}; color: ${contrastColor}; border-color: rgba(255,255,255,0.2);` : '';
+
+            return `
+                <div class="${itemClasses}" style="${itemStyle}" data-id="${cls.id}">
+                    <span class="w-3.5 h-3.5 rounded-md shadow-sm shrink-0" style="background-color: ${isSelected ? contrastColor : cls.color}"></span>
+                    <span class="class-name flex-1 font-semibold text-[0.85rem] truncate" title="Double-click to rename">${cls.name}</span>
+                    <span class="text-[0.7rem] px-1.5 py-0.5 rounded border border-white/10 font-mono" style="background: rgba(0,0,0,0.2); color: inherit;">${cls.id}</span>
+                    <button class="btn-delete-class opacity-0 group-hover:opacity-100 hover:scale-125 transition-all text-[1.2rem] leading-none px-1" style="color: inherit;" title="Delete Class">&times;</button>
+                </div>
+            `;
+        }).join('');
         this.dom.classList.querySelectorAll('.class-item').forEach(item => {
             const nameSpan = item.querySelector('.class-name');
             const id = parseInt(item.dataset.id);
