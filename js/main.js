@@ -605,10 +605,18 @@ class App {
             setTimeout(async () => {
                 this.updateStatus('🎯 AI Analyzing demo scene...');
                 const bitmap = await createImageBitmap(file);
-                const results = await ai.detect(bitmap);
-                state.set({ annotations: results });
+                const predictions = await ai.detect(bitmap);
+                
+                // Use the unified mapping logic to prevent "Pending" classes
+                const { mapped, classesChanged, updatedClasses } = this.mapPredictionsToClasses(predictions, state.data.classes);
+                
+                if (classesChanged) {
+                    state.set({ classes: updatedClasses });
+                }
+                
+                state.set({ annotations: mapped });
                 this.canvasEngine.draw();
-                this.updateStatus(`✅ Demo Ready: Found ${results.length} objects`);
+                this.updateStatus(`✅ Demo Ready: Found ${mapped.length} objects`);
             }, 1000);
 
         } catch (err) {
@@ -1152,22 +1160,8 @@ class App {
                     const predictions = await ai.detect(bitmap);
 
                     if (predictions.length > 0) {
-                        let classesChanged = false;
-                        // Standard COCO 80 classes for model mapping
-                        const cocoNames = ["person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"];
-
-                        const mapped = predictions.map(p => {
-                            const aiName = cocoNames[p.classId] || `class_${p.classId}`;
-                            let projectClass = batchClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
-
-                            if (!projectClass) {
-                                const newId = batchClasses.length > 0 ? Math.max(...batchClasses.map(c => c.id)) + 1 : 0;
-                                projectClass = { id: newId, name: aiName, color: YoloHelper.generateColor(newId) };
-                                batchClasses.push(projectClass);
-                                classesChanged = true;
-                            }
-                            return { ...p, classId: projectClass.id };
-                        });
+                        const { mapped, classesChanged, updatedClasses } = this.mapPredictionsToClasses(predictions, batchClasses);
+                        batchClasses = updatedClasses;
 
                         if (classesChanged) {
                             state.set({ classes: [...batchClasses] });
@@ -1204,6 +1198,32 @@ class App {
             await this.loadImage(state.data.currentImageIndex);
         }
         this.updateStatus(cancelled ? '⚠️ AI Batch Cancelled' : '✅ AI Batch Complete');
+    }
+
+    /**
+     * Maps raw AI class IDs (COCO 80) to the project's local class registry.
+     * Automatically registers new classes as they are encountered.
+     */
+    mapPredictionsToClasses(predictions, currentClasses) {
+        let classesChanged = false;
+        let updatedClasses = [...currentClasses];
+        
+        const cocoNames = ["person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"];
+
+        const mapped = predictions.map(p => {
+            const aiName = cocoNames[p.classId] || `class_${p.classId}`;
+            let projectClass = updatedClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
+
+            if (!projectClass) {
+                const newId = updatedClasses.length > 0 ? Math.max(...updatedClasses.map(c => c.id)) + 1 : 0;
+                projectClass = { id: newId, name: aiName, color: YoloHelper.generateColor(newId) };
+                updatedClasses.push(projectClass);
+                classesChanged = true;
+            }
+            return { ...p, classId: projectClass.id };
+        });
+
+        return { mapped, classesChanged, updatedClasses };
     }
 
     updateStatus(msg, isError = false) {
