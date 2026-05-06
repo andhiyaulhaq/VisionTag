@@ -18,7 +18,7 @@
     <div id="app" class="flex flex-col h-screen">
         <!-- Header / Toolbar -->
         <header
-            class="h-(--header-height) bg-(--bg-header) border-b border-(--glass-border) flex items-center justify-between z-100 py-1 pl-3 pr-4">
+            class="h-(--header-height) bg-(--bg-header) border-b border-(--glass-border) flex items-center justify-between z-100 py-2 pl-3 pr-4">
             <div class="flex items-center gap-[10px] h-full">
                 <a href="/" style="display: block; height: 100%;">
                     <img src="/st-logo-horizontal.png" alt="SharpTensor" class="h-full w-auto block object-contain">
@@ -33,7 +33,7 @@
                         <path d="m13 13 6 6" />
                     </svg>
                 </st-tool-button>
-                <st-tool-button id="btn-draw" title="Draw Box (W)" disabled>
+                <st-tool-button id="btn-draw" title="Draw / Magic Box (W)" disabled>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
                         <rect width="18" height="18" x="3" y="3" rx="2" />
@@ -131,6 +131,17 @@
             <!-- Right Sidebar: Classes & Inspector -->
             <aside
                 class="w-(--sidebar-right-width) bg-(--bg-sidebar) border-l border-(--border) flex flex-col px-4 overflow-y-auto">
+                <st-sidebar-section title="Active Task">
+                    <div class="flex p-1 bg-(--bg-card) rounded-lg border border-(--border) gap-1">
+                        <button id="task-det" class="flex-1 py-1.5 rounded-md text-[0.75rem] font-bold transition-all active-task-btn disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                            Detection
+                        </button>
+                        <button id="task-seg" class="flex-1 py-1.5 rounded-md text-[0.75rem] font-bold transition-all text-(--text-muted) hover:text-(--text-primary) disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+                            Segmentation
+                        </button>
+                    </div>
+                </st-sidebar-section>
+
                 <st-sidebar-section title="Classes">
                     <div class="flex flex-col gap-1 py-1" id="class-list"></div>
                     <button id="btn-add-class"
@@ -170,8 +181,12 @@
                             </svg>
                             <span>Auto-Label Dataset</span>
                         </button>
-                        <p id="ai-model-name" class="text-[0.7rem] text-(--text-muted) mt-1 text-center italic">Using
-                            Default: YOLOv8n</p>
+                    </div>
+                </st-sidebar-section>
+
+                <st-sidebar-section title="AI Inspector">
+                    <div id="ai-logs" class="bg-black/20 rounded-lg p-2.5 font-mono text-[0.65rem] h-40 overflow-y-auto flex flex-col gap-1.5 border border-(--border) custom-scrollbar">
+                        <div class="text-(--text-muted) italic">Waiting for AI activity...</div>
                     </div>
                 </st-sidebar-section>
 
@@ -214,6 +229,9 @@
                                     class="bg-(--bg-card) px-1.5 py-0.5 rounded border border-(--border) text-(--text-primary) font-mono text-[0.7rem]">Ctrl</kbd><span>+</span><kbd
                                     class="bg-(--bg-card) px-1.5 py-0.5 rounded border border-(--border) text-(--text-primary) font-mono text-[0.7rem]">Scroll</kbd>
                             </div>
+                        </li>
+                        <li class="flex justify-between items-center text-[0.8rem] text-(--text-secondary)"><span>Switch Task</span> <kbd
+                                class="bg-(--bg-card) px-1.5 py-0.5 rounded border border-(--border) text-(--text-primary) font-mono text-[0.7rem]">T</kbd>
                         </li>
                     </ul>
                 </div>

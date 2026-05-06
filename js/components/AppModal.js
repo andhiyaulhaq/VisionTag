@@ -32,8 +32,15 @@ export class AppModal extends HTMLElement {
                         <div class="mb-6">
                             <p class="modal-message text-(--text-secondary) leading-[1.6] text-[1rem]">Modal message goes here.</p>
                             <input type="text" class="modal-input w-full bg-[#242C2E]/50 border border-(--border) px-4 py-3 rounded-[8px] text-white text-[1rem] mt-4 mb-6 outline-none transition-all duration-200 shadow-[inset_0_2px_4px_rgba(0,0,0,0.1)] focus:border-(--accent) focus:bg-[#242C2E]/80 focus:ring-4 focus:ring-(--accent-glow) hidden" placeholder="">
+                            
+                            <div class="modal-progress-container hidden mt-6">
+                                <div class="w-full bg-black/30 h-2 rounded-full overflow-hidden border border-white/5">
+                                    <div class="modal-progress-fill h-full bg-(--accent) shadow-[0_0_8px_var(--accent-glow)] transition-all duration-75" style="width: 0%"></div>
+                                </div>
+                                <p class="modal-progress-text text-[0.75rem] text-(--text-muted) mt-3 font-mono text-center">0 / 0 images</p>
+                            </div>
                         </div>
-                        <div class="flex justify-end gap-3">
+                        <div class="modal-actions flex justify-end gap-3">
                             <button class="modal-cancel inline-flex items-center justify-center px-4 py-2 rounded-lg font-semibold bg-(--bg-card) border border-(--border) hover:bg-(--bg-hover) transition-all">Cancel</button>
                             <button class="modal-confirm inline-flex items-center justify-center px-4 py-2 rounded-lg font-semibold bg-(--accent) text-(--accent-text) hover:bg-(--accent-light) shadow-[0_4px_12px_var(--accent-glow)] transition-all">Confirm</button>
                         </div>

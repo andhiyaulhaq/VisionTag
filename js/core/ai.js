@@ -1,251 +1,231 @@
 import { state } from './state.js';
+import { ResizeLongestSide, PromptEncoder } from './sam_utils.js';
 
 // Use the global 'ort' from the script tag to ensure JS and WASM versions match perfectly
 const ort = globalThis.ort;
 
 /**
  * SharpTensor AI Engine
- * Handles YOLOv8/v11 inference via ONNX Runtime Web.
+ * Bridge class that delegates heavy AI tasks to Background Workers.
  */
 export class AIEngine {
     constructor() {
-        this.session = null;
-        this.inputShape = [1, 3, 640, 640];
-        this.isLoaded = false;
+        this.samDecoderSession = null;
+        this.promptEncoder = null;
+        this.worker = null;
         
-        // Default COCO classes for the bundled model
-        this.cocoClasses = [
-            'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'traffic light',
-            'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-            'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
-            'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard',
-            'tennis racket', 'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple',
-            'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
-            'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
-            'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors', 'teddy bear',
-            'hair drier', 'toothbrush'
-        ];
+        this.isLoaded = false;
+        this.isWorkerReady = false;
+        this.imageEmbeddings = null;
+        this.currentBitmap = null;
+        this.rtdetrConfig = null;
+        
+        this.samTransform = new ResizeLongestSide(1024);
+        this.embeddingCache = new Map();
+        this.pendingCacheKeys = new Set();
+        this.pendingDetections = new Map(); // requestId -> resolve
+
+        this.initWorker();
+    }
+
+    initWorker() {
+        if (this.worker) return;
+        this.worker = new Worker(new URL('./ai.worker.js', import.meta.url));
+        this.worker.onmessage = (e) => this.handleWorkerMessage(e);
+    }
+
+    handleWorkerMessage(e) {
+        const { type, payload } = e.data;
+        
+        if (type === 'initialized') {
+            this.isWorkerReady = true;
+            console.log('👷 AI Worker: Background engines ready');
+        }
+
+        if (type === 'encoded') {
+            const { embeddings, dims, cacheKey, latency } = payload;
+            if (cacheKey) this.pendingCacheKeys.delete(cacheKey);
+
+            const tensor = new ort.Tensor('float32', embeddings, dims);
+            this.imageEmbeddings = tensor;
+            state.set({ modelStatus: 'ready' });
+            
+            if (cacheKey) {
+                this.embeddingCache.set(cacheKey, { embeddings: tensor, bitmap: this.currentBitmap });
+                if (this.embeddingCache.size > 15) {
+                    const oldestKey = this.embeddingCache.keys().next().value;
+                    this.embeddingCache.delete(oldestKey);
+                }
+            }
+            this.log(`🖼️ ${cacheKey || 'Image'} encoded (${latency.toFixed(0)}ms)`);
+        }
+
+        if (type === 'detected') {
+            const { detections, requestId, latency } = payload;
+            const resolve = this.pendingDetections.get(requestId);
+            if (resolve) {
+                this.pendingDetections.delete(requestId);
+                resolve(detections);
+            }
+            this.log(`🎯 Found ${detections.length} objects (${latency.toFixed(0)}ms)`);
+        }
+
+        if (type === 'error') {
+            this.log(`❌ Worker error: ${payload}`, 'error');
+            state.set({ modelStatus: 'error' });
+        }
+    }
+
+    log(msg, type = 'info') {
+        const event = new CustomEvent('ai-log', {
+            detail: {
+                message: msg,
+                type: type,
+                time: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            }
+        });
+        window.dispatchEvent(event);
     }
 
     /**
-     * Load the ONNX model
+     * Initialize background engines
      */
-    async loadModel(modelSource) {
+    async loadModels() {
         try {
             state.set({ modelStatus: 'loading' });
-            console.log('🧠 AI: Loading model...', modelSource);
+            
+            // 1. Send Init Command to Worker
+            this.worker.postMessage({
+                type: 'init',
+                payload: { 
+                    samUrl: '/models/mobilesam_encoder.onnx',
+                    rtdetrUrl: '/models/rtdetr.onnx'
+                }
+            });
 
-            const options = {
-                executionProviders: ['wasm'], // Use WASM for 100% compatibility with YOLO operations
-            };
+            // 2. Load Metadata Config
+            const configResp = await fetch('/models/rtdetr_config.json');
+            this.rtdetrConfig = await configResp.json();
+            
+            // 3. Load SAM Decoder (Remains on main thread for interactivity)
+            const options = { executionProviders: ['wasm'], numThreads: self.navigator.hardwareConcurrency || 4 };
+            this.samDecoderSession = await ort.InferenceSession.create('/models/mobilesam_decoder.onnx', options);
 
-            if (modelSource instanceof File) {
-                const buffer = await modelSource.arrayBuffer();
-                this.session = await ort.InferenceSession.create(buffer, options);
-            } else {
-                // Load from URL (default model)
-                this.session = await ort.InferenceSession.create(modelSource, options);
-            }
+            // 4. Load Prompt Encoder Weights
+            const weightsResp = await fetch('/models/mobilesam_prompt_encoder_weights.json');
+            const weights = await weightsResp.json();
+            this.promptEncoder = new PromptEncoder(weights);
 
             this.isLoaded = true;
             state.set({ 
                 modelStatus: 'ready',
-                aiModel: { name: modelSource instanceof File ? modelSource.name : 'YOLOv8n (Default)' }
+                aiModel: { name: 'RT-DETR + MobileSAM (Worker Optimized)' }
             });
-            console.log('✅ AI: Model ready');
+            this.log('✅ AI Engines Loaded (Hybrid Mode)');
         } catch (err) {
-            console.error('❌ AI: Failed to load model:', err);
+            this.log(`❌ Load error: ${err.message}`, 'error');
             state.set({ modelStatus: 'error' });
             throw err;
         }
     }
 
     /**
-     * Run inference on an image
-     * @param {ImageBitmap} bitmap 
-     * @returns {Array} Annotations
+     * Run background detection
      */
-    async predict(bitmap) {
-        if (!this.isLoaded) return [];
+    detect(bitmap) {
+        if (!this.isLoaded) return Promise.resolve([]);
+        const requestId = Math.random().toString(36).substr(2, 9);
+        
+        return new Promise((resolve) => {
+            this.pendingDetections.set(requestId, resolve);
+            
+            // Capture image for worker
+            const canvas = document.createElement('canvas');
+            canvas.width = bitmap.width;
+            canvas.height = bitmap.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(bitmap, 0, 0);
+            const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
 
-        const { input, ratio, pad } = await this.preprocess(bitmap);
-        
-        const feeds = {};
-        feeds[this.session.inputNames[0]] = input;
-        
-        const results = await this.session.run(feeds);
-        const output = results[this.session.outputNames[0]];
-        
-        return this.postprocess(output, bitmap.width, bitmap.height, ratio, pad);
+            this.worker.postMessage({
+                type: 'detect',
+                payload: { imageData, width: bitmap.width, height: bitmap.height, requestId }
+            }, [imageData.data.buffer]);
+        });
     }
 
-    /**
-     * Prepare image for YOLO (resize, padding, normalization)
-     */
-    async preprocess(bitmap) {
-        const [batch, channels, height, width] = this.inputShape;
+    async setSAMImage(bitmap, cacheKey = null) {
+        if (!this.isLoaded) return;
+        if (cacheKey && this.pendingCacheKeys.has(cacheKey)) return;
+
+        if (cacheKey && this.embeddingCache.has(cacheKey)) {
+            const entry = this.embeddingCache.get(cacheKey);
+            this.imageEmbeddings = entry.embeddings;
+            return;
+        }
+
+        this.currentBitmap = bitmap;
+        if (cacheKey) this.pendingCacheKeys.add(cacheKey);
         
-        // 1. Resize and Pad (Letterbox)
         const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
         const ctx = canvas.getContext('2d');
-        
-        const r = Math.min(width / bitmap.width, height / bitmap.height);
-        const nw = bitmap.width * r;
-        const nh = bitmap.height * r;
-        const dw = (width - nw) / 2;
-        const dh = (height - nh) / 2;
-        
-        ctx.fillStyle = '#727272'; // Neutral grey padding
-        ctx.fillRect(0, 0, width, height);
-        ctx.drawImage(bitmap, dw, dh, nw, nh);
-        
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const { data } = imageData;
-        
-        // 2. Normalize and HWC to CHW
-        const floatData = new Float32Array(width * height * channels);
-        for (let i = 0; i < data.length / 4; i++) {
-            floatData[i] = data[i * 4] / 255.0; // R
-            floatData[i + width * height] = data[i * 4 + 1] / 255.0; // G
-            floatData[i + width * height * 2] = data[i * 4 + 2] / 255.0; // B
-        }
-        
-        return {
-            input: new ort.Tensor('float32', floatData, this.inputShape),
-            ratio: r,
-            pad: { x: dw, y: dh }
-        };
+        ctx.drawImage(bitmap, 0, 0);
+        const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+
+        this.log(`🍳 Background encoding: ${cacheKey || 'active image'}...`);
+        state.set({ modelStatus: 'processing' });
+
+        this.worker.postMessage({
+            type: 'encode',
+            payload: { imageData, width: bitmap.width, height: bitmap.height, cacheKey }
+        }, [imageData.data.buffer]);
     }
 
-    /**
-     * Parse YOLOv8/v11 output tensor
-     * Robustly handles both [1, 84, 8400] and [1, 8400, 84] formats
-     */
-    postprocess(tensor, origW, origH, ratio, pad) {
-        const data = tensor.data;
-        const dims = tensor.dims;
-        const boxes = [];
-        const threshold = 0.45;
+    async predictSAMMask(points = null, boxes = null) {
+        if (!this.imageEmbeddings || !this.promptEncoder) return null;
+        const start = performance.now();
+        const origSize = [this.currentBitmap.height, this.currentBitmap.width];
+        
+        let tp = null;
+        if (points) tp = { coords: this.samTransform.applyCoords(points.coords, origSize), labels: points.labels };
+        let tb = null;
+        if (boxes) tb = this.samTransform.applyBoxes(boxes, origSize);
 
-        // Determine layout
-        // Format A: [1, 84, 8400] (Standard YOLOv8)
-        // Format B: [1, 8400, 84] (Some exports)
-        let numPredictions, numAttributes;
-        let isTransposed = false;
-
-        if (dims[1] < dims[2]) {
-            // [1, 84, 8400]
-            numAttributes = dims[1];
-            numPredictions = dims[2];
-            isTransposed = true;
-        } else {
-            // [1, 8400, 84]
-            numPredictions = dims[1];
-            numAttributes = dims[2];
-            isTransposed = false;
-        }
-
-        const numClasses = numAttributes - 4;
-        console.log(`🤖 AI: Detected ${isTransposed ? '[84, 8400]' : '[8400, 84]'} layout. Classes: ${numClasses}`);
-
-        for (let i = 0; i < numPredictions; i++) {
-            let maxScore = -1;
-            let classId = -1;
-
-            // Extract scores
-            for (let c = 0; c < numClasses; c++) {
-                const idx = isTransposed 
-                    ? (numPredictions * (c + 4) + i) 
-                    : (i * numAttributes + (c + 4));
-                const score = data[idx];
-                if (score > maxScore) {
-                    maxScore = score;
-                    classId = c;
-                }
-            }
-
-            if (maxScore > threshold) {
-                // Extract box coordinates
-                let cx, cy, w, h;
-                if (isTransposed) {
-                    cx = data[numPredictions * 0 + i];
-                    cy = data[numPredictions * 1 + i];
-                    w = data[numPredictions * 2 + i];
-                    h = data[numPredictions * 3 + i];
-                } else {
-                    cx = data[i * numAttributes];
-                    cy = data[i * numAttributes + 1];
-                    w = data[i * numAttributes + 2];
-                    h = data[i * numAttributes + 3];
-                }
-
-                // YOLOv8 outputs are usually absolute pixels in inference space (e.g. 0-640)
-                // but we check if they are normalized (0-1)
-                const scale = (cx <= 1 && cy <= 1 && w <= 1 && h <= 1) ? 640 : 1;
-                
-                const realCx = cx * scale;
-                const realCy = cy * scale;
-                const realW = w * scale;
-                const realH = h * scale;
-
-                // Map back to original image pixels
-                const x = (realCx - realW / 2 - pad.x) / ratio;
-                const y = (realCy - realH / 2 - pad.y) / ratio;
-                const width = realW / ratio;
-                const height = realH / ratio;
-
-                boxes.push({
-                    id: Math.random(),
-                    classId: classId,
-                    x, y, width, height,
-                    score: maxScore
-                });
-            }
-        }
-
-        console.log(`🎯 AI: Found ${boxes.length} detections.`);
-        return this.nonMaxSuppression(boxes, 0.45);
+        const { sparse, sparseDims, dense, denseDims } = this.promptEncoder.encode(tp, tb);
+        const results = await this.samDecoderSession.run({
+            image_embeddings: this.imageEmbeddings,
+            sparse_embeddings: new ort.Tensor('float32', sparse, sparseDims),
+            dense_embeddings: new ort.Tensor('float32', dense, denseDims)
+        });
+        
+        const maskOnnx = results[this.samDecoderSession.outputNames[0]];
+        const mask = this.postprocessMask(maskOnnx.data, maskOnnx.dims, origSize[0], origSize[1]);
+        return mask;
     }
 
-    /**
-     * Simple NMS implementation
-     */
-    nonMaxSuppression(boxes, iouThreshold) {
-        boxes.sort((a, b) => b.score - a.score);
-        const selected = [];
-        const active = new Array(boxes.length).fill(true);
-        
-        for (let i = 0; i < boxes.length; i++) {
-            if (!active[i]) continue;
-            
-            selected.push(boxes[i]);
-            
-            for (let j = i + 1; j < boxes.length; j++) {
-                if (!active[j]) continue;
-                
-                if (this.calculateIoU(boxes[i], boxes[j]) > iouThreshold) {
-                    active[j] = false;
-                }
-            }
+    postprocessMask(data, dims, h, w) {
+        const maskSize = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = maskSize;
+        canvas.height = maskSize;
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.createImageData(maskSize, maskSize);
+        for (let i = 0; i < data.length; i++) {
+            const val = data[i] > 0 ? 255 : 0;
+            imgData.data[i * 4] = val;
+            imgData.data[i * 4 + 1] = val;
+            imgData.data[i * 4 + 2] = val;
+            imgData.data[i * 4 + 3] = 255;
         }
-        
-        return selected;
-    }
-
-    calculateIoU(box1, box2) {
-        const x1 = Math.max(box1.x, box2.x);
-        const y1 = Math.max(box1.y, box2.y);
-        const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
-        const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
-        
-        const width = Math.max(0, x2 - x1);
-        const height = Math.max(0, y2 - y1);
-        const intersection = width * height;
-        
-        const union = box1.width * box1.height + box2.width * box2.height - intersection;
-        return intersection / union;
+        ctx.putImageData(imgData, 0, 0);
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = w;
+        finalCanvas.height = h;
+        const fctx = finalCanvas.getContext('2d');
+        fctx.drawImage(canvas, 0, 0, maskSize, maskSize, 0, 0, w, h);
+        return fctx.getImageData(0, 0, w, h).data.filter((_, i) => i % 4 === 0).map(v => v > 128 ? 1 : 0);
     }
 }
 

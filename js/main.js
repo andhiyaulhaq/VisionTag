@@ -2,10 +2,8 @@ import { state } from './core/state.js';
 import { CanvasEngine } from './engine/canvas.js';
 import { YoloHelper } from './utils/yolo.js';
 import { ai } from './core/ai.js';
+import { ContourTracer } from './core/sam_utils.js';
 import './components/index.js';
-
-// No longer using custom Web Components - reverting to raw HTML for Tailwind migration
-
 
 /**
  * SharpTensor Main Entry Point
@@ -18,11 +16,16 @@ class App {
         this.initStateListeners();
         this.initClickLogger();
         this.initGlobalErrorHandling();
-        
-        // Load default model
-        ai.loadModel('/assets/model/yolov8n.onnx');
 
-        console.log('🚀 SharpTensor Initialized');
+        // Load models on startup
+        ai.loadModels();
+
+        this._saving = false;
+        this._savePending = false;
+        this._saveTimer = null;
+        this.imageCache = new Map();
+
+        console.log('🚀 SharpTensor Initialized (RT-DETR + MobileSAM)');
     }
 
     initGlobalErrorHandling() {
@@ -68,7 +71,7 @@ class App {
             statusMessage: document.getElementById('status-message'),
             zoomDisplay: document.getElementById('zoom-display'),
             btnAddClass: document.getElementById('btn-add-class'),
-            
+
             modal: document.getElementById('app-modal'),
 
             btnLoadModel: document.getElementById('btn-load-model'),
@@ -76,12 +79,17 @@ class App {
             btnClearAll: document.getElementById('btn-clear-all'),
             modelStatusBadge: document.getElementById('model-status-badge'),
             aiModelName: document.getElementById('ai-model-name'),
-            workspace: document.getElementById('workspace')
+            workspace: document.getElementById('workspace'),
+            btnTaskDet: document.getElementById('task-det'),
+            btnTaskSeg: document.getElementById('task-seg')
         };
     }
 
     initEventListeners() {
-        this.dom.btnDraw.addEventListener('click', () => state.set({ mode: 'draw' }));
+        this.dom.btnDraw.addEventListener('click', () => {
+            const isDet = state.data.currentTask === 'detection';
+            state.set({ mode: isDet ? 'draw' : 'magic' });
+        });
         this.dom.btnSelect.addEventListener('click', () => state.set({ mode: 'select' }));
         this.dom.btnOpen.addEventListener('click', () => this.handleOpenFolder());
 
@@ -98,10 +106,13 @@ class App {
         this.dom.btnAutoLabelAll.addEventListener('click', () => this.handleAutoLabelDataset());
         this.dom.btnClearAll.addEventListener('click', () => this.handleClearAllAnnotations());
 
+        this.dom.btnTaskDet.addEventListener('click', () => state.set({ currentTask: 'detection' }));
+        this.dom.btnTaskSeg.addEventListener('click', () => state.set({ currentTask: 'segmentation' }));
+
         window.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
             const key = e.key.toLowerCase();
-            
+
             if (e.ctrlKey && key === 'z') {
                 e.preventDefault();
                 if (e.shiftKey) state.redo();
@@ -114,11 +125,22 @@ class App {
                 return;
             }
 
-            if (key === 'w') state.set({ mode: 'draw' });
+            if (key === 'w') {
+                const isDet = state.data.currentTask === 'detection';
+                state.set({ mode: isDet ? 'draw' : 'magic' });
+            }
             if (key === 'v') state.set({ mode: 'select' });
+            if (key === 'm') {
+                // If user presses M, we just activate the unified tool logic for the task
+                const isDet = state.data.currentTask === 'detection';
+                state.set({ mode: isDet ? 'draw' : 'magic' });
+            }
             if (key === 'd') this.nextImage();
             if (key === 'a') this.prevImage();
+            if (key === 's') this.confirmMagicMask();
+            if (key === 'escape') this.resetMagicInteraction();
             if (key === 'delete' || key === 'backspace') this.deleteSelectedBox();
+            if (key === 't') state.set({ currentTask: state.data.currentTask === 'detection' ? 'segmentation' : 'detection' });
 
             if (/^[1-9]$/.test(key)) {
                 this.assignClassToSelected(parseInt(key) - 1);
@@ -153,10 +175,22 @@ class App {
     initStateListeners() {
         state.subscribe((data, oldData) => {
             if (data.mode !== oldData.mode) {
-                this.dom.btnDraw.classList.toggle('active', data.mode === 'draw');
+                const isDrawOrMagic = data.mode === 'draw' || data.mode === 'magic';
+                this.dom.btnDraw.classList.toggle('active', isDrawOrMagic);
                 this.dom.btnSelect.classList.toggle('active', data.mode === 'select');
+
                 if (data.mode) {
                     this.updateStatus(`Mode: ${data.mode.toUpperCase()}`);
+                }
+
+                if (data.mode === 'magic') {
+                    this.resetMagicInteraction();
+                    // Lazy-load SAM embeddings when entering magic mode
+                    if (data.currentImageBitmap) {
+                        const imgName = data.images[data.currentImageIndex]?.name;
+                        // Use setTimeout to ensure UI updates before heavy AI starts
+                        setTimeout(() => ai.setSAMImage(data.currentImageBitmap, imgName), 50);
+                    }
                 }
             }
 
@@ -165,55 +199,52 @@ class App {
                 this.dom.fileCountBadge.textContent = `${data.images.length} items`;
 
                 if (data.currentImageIndex !== oldData.currentImageIndex) {
-                    if (oldData.currentImageIndex !== -1) {
-                        this.saveAnnotations(oldData.currentImageIndex, oldData.annotations);
-                    }
                     this.loadImage(data.currentImageIndex);
-                    this.updateImageSelection(data.currentImageIndex);
+                    this.renderImageList(data.images);
                 }
             }
 
-            if (data.zoom !== oldData.zoom) {
-                this.dom.zoomDisplay.textContent = `${Math.round(data.zoom * 100)}%`;
+            if (data.currentTask !== oldData.currentTask) {
+                this.updateTaskUI(data.currentTask);
+                // Reload annotations for the new task without a full image reload
+                this.syncTaskAnnotations();
             }
 
-            if (data.classes !== oldData.classes) {
-                this.renderClassList(data.classes, data.selectedClassId);
-            } else if (data.selectedClassId !== oldData.selectedClassId) {
-                this.updateClassSelection(data.selectedClassId);
-            }
-
-            if (data.annotations !== oldData.annotations) {
+            if (data.annotations !== oldData.annotations && !data.isAutoLabeling) {
                 this.renderAnnotationList(data.annotations, data.selectedBoxId);
                 this.dom.boxCountBadge.textContent = data.annotations.length;
+
+                // Immediate status update for UI feedback
+                const newImages = [...data.images];
+                if (newImages[data.currentImageIndex]) {
+                    const hasAnnos = data.annotations.length > 0;
+                    if (newImages[data.currentImageIndex].status !== (hasAnnos ? 'labeled' : 'pending')) {
+                        newImages[data.currentImageIndex].status = hasAnnos ? 'labeled' : 'pending';
+                        state.set({ images: newImages });
+                        this.renderImageList(newImages);
+                    }
+                }
+
+                // Debounced save to prevent File System Access API conflicts
+                this.debouncedSave();
             } else if (data.selectedBoxId !== oldData.selectedBoxId) {
                 this.updateAnnotationSelection(data.selectedBoxId);
+
+                // If in magic mode and a box is selected, use it as a box prompt
+                if (data.mode === 'magic' && data.selectedBoxId !== null) {
+                    const box = data.annotations.find(b => b.id === data.selectedBoxId);
+                    if (box && !box.polygon) {
+                        this.canvasEngine.handleMagicBox(box.x, box.y, box.x + box.width, box.y + box.height);
+                    }
+                } else if (data.selectedBoxId === null) {
+                    this.resetMagicInteraction();
+                }
             }
 
             if (data.loading !== oldData.loading) {
                 document.getElementById('loading-overlay').classList.toggle('hidden', !data.loading);
             }
 
-            // Always update model status badge
-            if (this.dom.modelStatusBadge) {
-                const badge = this.dom.modelStatusBadge;
-                badge.className = "px-2 py-0.5 rounded-full text-[0.7rem] border transition-all";
-                
-                if (data.modelStatus === 'idle') {
-                    badge.classList.add("bg-gray-500/20", "text-gray-400", "border-gray-500/30");
-                    badge.textContent = "Idle";
-                } else if (data.modelStatus === 'loading') {
-                    badge.classList.add("bg-yellow-500/20", "text-yellow-500", "border-yellow-500/30", "animate-pulse");
-                    badge.textContent = "Loading...";
-                } else if (data.modelStatus === 'ready') {
-                    badge.classList.add("bg-green-500/20", "text-green-500", "border-green-500/30");
-                    badge.textContent = "Ready";
-                } else if (data.modelStatus === 'error') {
-                    badge.classList.add("bg-red-500/20", "text-red-500", "border-red-500/30");
-                    badge.textContent = "Error";
-                }
-            }
-            
             // Always update button states based on folder presence
             const isFolderLoaded = !!data.folderHandle;
             if (this.dom.btnSelect) this.dom.btnSelect.disabled = !isFolderLoaded;
@@ -222,29 +253,143 @@ class App {
             if (this.dom.btnNext) this.dom.btnNext.disabled = !isFolderLoaded;
             if (this.dom.btnExport) this.dom.btnExport.disabled = !isFolderLoaded;
             if (this.dom.btnAddClass) this.dom.btnAddClass.disabled = !isFolderLoaded;
-            if (this.dom.btnLoadModel) this.dom.btnLoadModel.disabled = !isFolderLoaded;
+            if (this.dom.btnLoadModel) this.dom.btnLoadModel.disabled = true; // Always disabled for now
             if (this.dom.btnClearAll) this.dom.btnClearAll.disabled = !isFolderLoaded;
+            if (this.dom.btnTaskDet) this.dom.btnTaskDet.disabled = !isFolderLoaded;
+            if (this.dom.btnTaskSeg) this.dom.btnTaskSeg.disabled = !isFolderLoaded;
 
-            // Model status still controls auto-label, but only if folder is loaded
             if (this.dom.btnAutoLabelAll) {
                 this.dom.btnAutoLabelAll.disabled = data.modelStatus !== 'ready' || !isFolderLoaded;
             }
-            if (data.aiModel?.name !== oldData.aiModel?.name) {
-                this.dom.aiModelName.textContent = data.aiModel ? `Using: ${data.aiModel.name}` : 'No model loaded';
+
+            // Update model status badge with task-aware naming
+            if (this.dom.modelStatusBadge) {
+                const badge = this.dom.modelStatusBadge;
+                badge.className = "px-2 py-0.5 rounded-full text-[0.7rem] border transition-all";
+
+                let modelName = "Idle";
+                if (data.modelStatus === 'loading') modelName = "Loading...";
+                else if (data.modelStatus === 'processing') modelName = "Thinking...";
+                else if (data.modelStatus === 'error') modelName = "Error";
+                else if (data.modelStatus === 'ready') {
+                    const isCustom = data.aiModel?.name?.startsWith('Custom:');
+                    if (isCustom) {
+                        modelName = data.aiModel.name;
+                    } else {
+                        modelName = data.currentTask === 'detection' ? 'RT-DETR' : 'RT-DETR + MobileSAM';
+                    }
+                }
+
+                badge.textContent = modelName;
+
+                if (data.modelStatus === 'idle') {
+                    badge.classList.add("bg-gray-500/20", "text-gray-400", "border-gray-500/30");
+                } else if (data.modelStatus === 'loading') {
+                    badge.classList.add("bg-yellow-500/20", "text-yellow-500", "border-yellow-500/30", "animate-pulse");
+                } else if (data.modelStatus === 'processing') {
+                    badge.classList.add("bg-blue-500/20", "text-blue-400", "border-blue-500/30", "animate-pulse");
+                } else if (data.modelStatus === 'ready') {
+                    badge.classList.add("bg-green-500/20", "text-green-500", "border-green-500/30");
+                } else if (data.modelStatus === 'error') {
+                    badge.classList.add("bg-red-500/20", "text-red-500", "border-red-500/30");
+                }
+            }
+
+            if (data.classes !== oldData.classes || data.selectedClassId !== oldData.selectedClassId) {
+                this.renderClassList(data.classes, data.selectedClassId);
+            }
+
+            this.initLogListener();
+        });
+    }
+
+    initLogListener() {
+        if (this._logInit) return;
+        this._logInit = true;
+
+        const logContainer = document.getElementById('ai-logs');
+        if (!logContainer) return;
+
+        window.addEventListener('ai-log', (e) => {
+            const { message, type, time } = e.detail;
+
+            const placeholder = logContainer.querySelector('.italic');
+            if (placeholder) placeholder.remove();
+
+            const logEntry = document.createElement('div');
+            logEntry.className = `flex gap-2 leading-tight py-0.5 border-b border-white/5 last:border-0`;
+
+            const timeSpan = document.createElement('span');
+            timeSpan.className = 'text-white/30 shrink-0 font-mono';
+            timeSpan.textContent = time;
+
+            const msgSpan = document.createElement('span');
+            msgSpan.className = type === 'error' ? 'text-red-400' : 'text-(--text-primary)';
+            msgSpan.textContent = message;
+
+            logEntry.appendChild(timeSpan);
+            logEntry.appendChild(msgSpan);
+            logContainer.appendChild(logEntry);
+
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            while (logContainer.children.length > 50) {
+                logContainer.removeChild(logContainer.firstChild);
             }
         });
     }
 
     async loadImage(index) {
+        if (index < 0 || index >= state.data.images.length) return;
         const imageInfo = state.data.images[index];
         if (!imageInfo) return;
 
+        // 1. Check Cache for Instant Render
+        if (this.imageCache.has(index)) {
+            const cached = this.imageCache.get(index);
+            const taskAnnos = state.data.currentTask === 'detection' ? cached.detAnnos : cached.segAnnos;
+            
+            state.set({
+                currentImageIndex: index,
+                currentImageBitmap: cached.bitmap,
+                annotations: taskAnnos || [],
+                loading: false,
+                activeMask: null,
+                promptPoints: [],
+                activePromptBox: null
+            });
+
+            this.fitImageToCanvas(cached.bitmap);
+            this.canvasEngine.draw();
+            
+            // Background SAM Warmup (with cache key)
+            if (state.data.currentTask === 'segmentation') {
+                setTimeout(() => ai.setSAMImage(cached.bitmap, imageInfo.name), 50);
+            }
+            
+            // Extend pre-loading to current neighborhood
+            this.preloadNeighborhood(index);
+            return;
+        }
+
+        // 2. Fallback to Slow Load (Flicker path)
         try {
             state.set({ loading: true, statusMessage: `Loading ${imageInfo.name}...` });
             const file = await imageInfo.handle.getFile();
             const bitmap = await createImageBitmap(file);
             const annotations = await this.loadAnnotations(imageInfo.name, bitmap);
             this.fitImageToCanvas(bitmap);
+
+            // Store in Cache (Multi-task aware)
+            const cacheEntry = { bitmap };
+            if (state.data.currentTask === 'detection') cacheEntry.detAnnos = annotations;
+            else cacheEntry.segAnnos = annotations;
+            
+            this.imageCache.set(index, cacheEntry);
+            if (this.imageCache.size > 15) {
+                const oldestIndex = this.imageCache.keys().next().value;
+                this.imageCache.delete(oldestIndex);
+            }
 
             state.undoStack = [];
             state.redoStack = [];
@@ -254,11 +399,108 @@ class App {
                 currentImageBitmap: bitmap,
                 annotations: annotations || [],
                 loading: false,
-                statusMessage: `Loaded: ${imageInfo.name}`
+                statusMessage: `Loaded: ${imageInfo.name}`,
+                activeMask: null,
+                promptPoints: [],
+                activePromptBox: null
             });
+
+            // Warm up SAM Encoder only if needed (Segmentation task)
+            if (state.data.currentTask === 'segmentation') {
+                setTimeout(() => ai.setSAMImage(bitmap, imageInfo.name), 50);
+            }
+
+            this.preloadNeighborhood(index);
         } catch (err) {
             console.error('Failed to load image:', err);
             this.updateStatus('Error loading image', true);
+        }
+    }
+
+    async preloadNeighborhood(currentIndex) {
+        const range = 3; // Preload 3 images before and after
+        const { images } = state.data;
+        
+        for (let i = 1; i <= range; i++) {
+            const nextIdx = currentIndex + i;
+            const prevIdx = currentIndex - i;
+            
+            if (nextIdx < images.length) this.preloadImage(nextIdx);
+            if (prevIdx >= 0) this.preloadImage(prevIdx);
+        }
+    }
+
+    async preloadImage(index) {
+        if (this.imageCache.has(index)) return;
+        
+        try {
+            const imageInfo = state.data.images[index];
+            const file = await imageInfo.handle.getFile();
+            const bitmap = await createImageBitmap(file);
+            const annotations = await this.loadAnnotations(imageInfo.name, bitmap);
+            
+            // Multi-task aware pre-load (default to current task)
+            const cacheEntry = { bitmap };
+            if (state.data.currentTask === 'detection') cacheEntry.detAnnos = annotations;
+            else cacheEntry.segAnnos = annotations;
+
+            this.imageCache.set(index, cacheEntry);
+            
+            // Limit cache to 15 images to balance memory and speed
+            if (this.imageCache.size > 15) {
+                const oldestIndex = this.imageCache.keys().next().value;
+                this.imageCache.delete(oldestIndex);
+            }
+        } catch (err) {
+            // Silently ignore pre-load failures (usually access or non-image files)
+        }
+    }
+
+    async syncTaskAnnotations() {
+        const { currentImageIndex, images, currentImageBitmap, currentTask } = state.data;
+        if (currentImageIndex === -1 || !currentImageBitmap) return;
+
+        const imageInfo = images[currentImageIndex];
+        const cacheEntry = this.imageCache.get(currentImageIndex);
+
+        // 1. Instant Cache Switch
+        if (cacheEntry) {
+            const taskAnnos = currentTask === 'detection' ? cacheEntry.detAnnos : cacheEntry.segAnnos;
+            if (taskAnnos) {
+                state.set({
+                    annotations: taskAnnos,
+                    activeMask: null,
+                    promptPoints: [],
+                    activePromptBox: null
+                });
+                
+                if (currentTask === 'segmentation') {
+                    setTimeout(() => ai.setSAMImage(currentImageBitmap, imageInfo.name), 50);
+                }
+                return;
+            }
+        }
+
+        // 2. Optimistic Clear for Responsiveness
+        state.set({ annotations: [], activeMask: null, promptPoints: [], activePromptBox: null });
+        this.updateStatus(`Syncing ${currentTask.toUpperCase()}...`);
+
+        try {
+            const annotations = await this.loadAnnotations(imageInfo.name, currentImageBitmap);
+            
+            // Update cache
+            if (cacheEntry) {
+                if (currentTask === 'detection') cacheEntry.detAnnos = annotations;
+                else cacheEntry.segAnnos = annotations;
+            }
+
+            state.set({ annotations: annotations || [] });
+
+            if (currentTask === 'segmentation') {
+                setTimeout(() => ai.setSAMImage(currentImageBitmap, imageInfo.name), 50);
+            }
+        } catch (err) {
+            console.error('Failed to sync task annotations:', err);
         }
     }
 
@@ -279,21 +521,23 @@ class App {
             state.set({ loading: true, statusMessage: 'Reading folder...' });
             await this.loadClasses(handle);
             const labelHandle = await handle.getDirectoryHandle('label', { create: true });
+            const labelSegHandle = await handle.getDirectoryHandle('label-seg', { create: true });
+
             const images = [];
             for await (const entry of handle.values()) {
                 if (entry.kind === 'file' && /\.(jpe?g|png|webp)$/i.test(entry.name)) {
-                    const txtName = entry.name.replace(/\.[^/.]+$/, "") + ".txt";
-                    let isLabeled = false;
-                    try { await labelHandle.getFileHandle(txtName); isLabeled = true; } catch (e) { }
-                    images.push({ name: entry.name, handle: entry, status: isLabeled ? 'labeled' : 'pending' });
+                    images.push({ name: entry.name, handle: entry, status: 'pending' });
                 }
             }
             images.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-            state.set({ 
-                folderHandle: handle, 
-                labelFolderHandle: labelHandle, 
-                images, 
-                currentImageIndex: images.length > 0 ? 0 : -1, 
+
+            this.imageCache.clear();
+            state.set({
+                folderHandle: handle,
+                labelFolderHandle: labelHandle,
+                labelSegFolderHandle: labelSegHandle,
+                images,
+                currentImageIndex: images.length > 0 ? 0 : -1,
                 loading: false,
                 mode: 'select'
             });
@@ -320,34 +564,54 @@ class App {
 
     async loadAnnotations(imgName, bitmap) {
         const txtName = imgName.replace(/\.[^/.]+$/, "") + ".txt";
+        const isSeg = state.data.currentTask === 'segmentation';
+        const folder = isSeg ? state.data.labelSegFolderHandle : state.data.labelFolderHandle;
+
         try {
-            const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName);
+            const fileHandle = await folder.getFileHandle(txtName);
             const file = await fileHandle.getFile();
             const content = await file.text();
-            return content.split('\n').map(line => YoloHelper.fromYolo(line, bitmap.width, bitmap.height)).filter(b => b !== null);
+            return content.split('\n')
+                .filter(l => l.trim())
+                .map(line => YoloHelper.fromYolo(line, bitmap.width, bitmap.height))
+                .filter(b => b !== null);
         } catch (e) { return []; }
     }
 
-    async saveAnnotations(index, annotations, bitmap = state.data.currentImageBitmap, skipUI = false) {
-        if (!state.data.labelFolderHandle || annotations.length === 0 || !bitmap) return;
-        const imgInfo = state.data.images[index];
-        const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
-        try {
-            const content = annotations.map(box => YoloHelper.toYolo(box, bitmap.width, bitmap.height)).join('\n');
-            const fileHandle = await state.data.labelFolderHandle.getFileHandle(txtName, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(content);
-            await writable.close();
-            
-            const newImages = [...state.data.images];
-            newImages[index].status = 'labeled';
-            state.set({ images: newImages });
-
-            if (!skipUI) {
-                this.renderImageList(newImages);
-                this.updateStatus(`Saved: label/${txtName}`);
+    debouncedSave() {
+        if (this._saveTimer) clearTimeout(this._saveTimer);
+        this._saveTimer = setTimeout(() => {
+            if (state.data.currentImageIndex !== -1) {
+                this.saveAnnotations(state.data.currentImageIndex, state.data.annotations, state.data.currentImageBitmap, true);
             }
-        } catch (err) { console.error('Failed to save:', err); }
+        }, 1000); // 1s debounce is safe for manual work
+    }
+
+    async saveAnnotations(index, annotations, bitmap = state.data.currentImageBitmap, skipUI = false) {
+        if (!state.data.folderHandle || !bitmap) return;
+
+        if (!this._saveQueue) this._saveQueue = Promise.resolve();
+
+        return this._saveQueue = this._saveQueue.then(async () => {
+            const imgInfo = state.data.images[index];
+            if (!imgInfo) return;
+            const txtName = imgInfo.name.replace(/\.[^/.]+$/, "") + ".txt";
+            const isSeg = state.data.currentTask === 'segmentation';
+            const folder = isSeg ? state.data.labelSegFolderHandle : state.data.labelFolderHandle;
+
+            try {
+                const content = annotations.map(box =>
+                    isSeg ? YoloHelper.toYoloSeg(box, bitmap.width, bitmap.height) : YoloHelper.toYolo(box, bitmap.width, bitmap.height)
+                ).join('\n');
+
+                const fileHandle = await folder.getFileHandle(txtName, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(content);
+                await writable.close();
+
+                if (!skipUI) this.updateStatus(`Saved ${isSeg ? 'Seg' : 'Det'}: ${txtName}`);
+            } catch (err) { console.error('Failed to save:', err); }
+        });
     }
 
     renderImageList(images) {
@@ -355,12 +619,19 @@ class App {
             this.dom.imageList.innerHTML = '<div class="empty-state">No images found</div>';
             return;
         }
-        this.dom.imageList.innerHTML = images.map((img, idx) => `
-            <div class="image-item group flex items-center justify-between p-2 rounded-lg text-[0.8rem] cursor-pointer transition-all gap-2.5 ${idx === state.data.currentImageIndex ? 'bg-(--accent)/15 text-(--accent-light) font-semibold shadow-sm' : 'text-(--text-secondary) hover:bg-(--bg-hover) hover:text-(--text-primary)'}" data-index="${idx}">
-                <span class="truncate flex-1">${img.name}</span>
-                ${img.status === 'labeled' ? '<span class="w-1.5 h-1.5 rounded-full bg-(--success) shadow-[0_0_8px_var(--success)]"></span>' : ''}
-            </div>
-        `).join('');
+        this.dom.imageList.innerHTML = images.map((img, idx) => {
+            const isActive = idx === state.data.currentImageIndex;
+            const itemClasses = isActive 
+                ? 'bg-(--accent)/10 text-(--accent-light) font-semibold ring-1 ring-(--accent)/30 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)] hover:bg-(--accent)/20' 
+                : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)';
+            
+            return `
+                <div class="image-item group flex items-center justify-between px-3 py-2 rounded-lg text-[0.8rem] cursor-pointer transition-all gap-2.5 ${itemClasses}" data-index="${idx}">
+                    <span class="truncate flex-1">${img.name}</span>
+                    ${img.status === 'labeled' ? '<span class="w-1.5 h-1.5 rounded-full bg-(--success) shadow-[0_0_8px_var(--success)]"></span>' : ''}
+                </div>
+            `;
+        }).join('');
         this.dom.imageList.querySelectorAll('.image-item').forEach(item => {
             item.addEventListener('click', () => state.set({ currentImageIndex: parseInt(item.dataset.index) }));
         });
@@ -472,8 +743,10 @@ class App {
         const modal = this.dom.modal;
         modal.querySelector('.modal-title').textContent = title;
         modal.querySelector('.modal-message').textContent = message;
-        
+
         const input = modal.querySelector('.modal-input');
+        const progressContainer = modal.querySelector('.modal-progress-container');
+
         if (inputPlaceholder) {
             input.classList.remove('hidden');
             input.placeholder = inputPlaceholder;
@@ -483,6 +756,8 @@ class App {
             input.classList.add('hidden');
         }
 
+        if (progressContainer) progressContainer.classList.add('hidden');
+
         const confirmBtn = modal.querySelector('.modal-confirm');
         const cancelBtn = modal.querySelector('.modal-cancel');
 
@@ -491,16 +766,16 @@ class App {
 
         // Danger mode detection
         const isDanger = /delete|purge|irreversible|critical|nuclear|🚨|☢️/i.test(title + message);
-        
+
         // Use toggle to avoid wiping out Tailwind utilities
         confirmBtn.classList.toggle('bg-red-600', isDanger);
         confirmBtn.classList.toggle('hover:bg-red-500', isDanger);
         confirmBtn.classList.toggle('shadow-[0_4px_12px_rgba(220,38,38,0.3)]', isDanger);
         confirmBtn.classList.toggle('text-white', isDanger);
-        
+
         confirmBtn.classList.toggle('bg-(--accent)', !isDanger);
         confirmBtn.classList.toggle('text-(--accent-text)', !isDanger);
-        
+
         const card = modal.querySelector('.modal-card');
         card.classList.toggle('border-t-red-500', isDanger);
         card.classList.toggle('border-t-2', isDanger);
@@ -637,7 +912,7 @@ class App {
                 try {
                     state.set({ loading: true, statusMessage: '🗑️ Clearing annotations...' });
                     const { labelFolderHandle, images } = state.data;
-                    
+
                     // Iterate through all images and delete their corresponding .txt files
                     for (const img of images) {
                         const txtName = img.name.replace(/\.[^/.]+$/, "") + ".txt";
@@ -650,10 +925,10 @@ class App {
                     }
 
                     // Reset current view
-                    state.set({ 
-                        annotations: [], 
+                    state.set({
+                        annotations: [],
                         selectedBoxId: null,
-                        loading: false 
+                        loading: false
                     });
 
                     this.renderImageList(images);
@@ -669,11 +944,7 @@ class App {
     }
 
     handleLoadCustomModel() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.onnx';
-        input.onchange = (e) => { if (e.target.files[0]) ai.loadModel(e.target.files[0]); };
-        input.click();
+        this.updateStatus('⚠️ Custom model loading disabled for RT-DETR pipeline', true);
     }
 
     async handleAutoLabelDataset() {
@@ -690,34 +961,41 @@ class App {
     }
 
     async startAutoLabelBatch() {
-        const overlay = document.createElement('div');
-        overlay.className = 'progress-overlay';
-        overlay.innerHTML = `
-            <div class="progress-container">
-                <h3>AI is labeling your dataset...</h3>
-                <div class="progress-bar"><div id="ai-progress-fill" class="progress-fill"></div></div>
-                <p id="ai-progress-text">0 / ${state.data.images.length} images</p>
-                <button id="btn-cancel-ai" class="btn btn-secondary" style="margin-top: 20px;">Cancel Task</button>
-            </div>
-        `;
-        this.dom.workspace.appendChild(overlay);
+        const modal = this.dom.modal;
+        const progressContainer = modal.querySelector('.modal-progress-container');
+        const fill = modal.querySelector('.modal-progress-fill');
+        const text = modal.querySelector('.modal-progress-text');
+        const confirmBtn = modal.querySelector('.modal-confirm');
+        const cancelBtn = modal.querySelector('.modal-cancel');
+
+        this.showModal({
+            title: 'AI Batch Processing',
+            message: 'Initializing AI models and scanning dataset...',
+            confirmText: 'Processing...',
+            cancelText: 'Stop Task'
+        });
+
+        if (progressContainer) progressContainer.classList.remove('hidden');
+        confirmBtn.disabled = true;
+        confirmBtn.classList.add('opacity-50');
+
         let cancelled = false;
-        overlay.querySelector('#btn-cancel-ai').onclick = () => { cancelled = true; };
+        cancelBtn.onclick = () => {
+            cancelled = true;
+            modal.classList.add('hidden');
+        };
+
         const images = state.data.images;
-        const fill = overlay.querySelector('#ai-progress-fill');
-        const text = overlay.querySelector('#ai-progress-text');
         state.set({ isAutoLabeling: true });
-        
+
         let completedCount = 0;
         const totalImages = images.length;
         let batchClasses = [...state.data.classes]; // Local sync for parallel tasks
-        
+
         const updateUI = (imgName) => {
             requestAnimationFrame(() => {
-                text.textContent = `⚡ AI Processing: ${completedCount} / ${totalImages}`;
+                text.textContent = `⚡ Processing: ${imgName} (${completedCount} / ${totalImages})`;
                 fill.style.width = `${(completedCount / totalImages) * 100}%`;
-                const progressText = document.getElementById('ai-progress-text');
-                if (progressText) progressText.textContent = `Processing: ${imgName} (${completedCount}/${totalImages})`;
             });
         };
 
@@ -734,14 +1012,14 @@ class App {
                     const file = await img.handle.getFile();
                     const bitmap = await createImageBitmap(file);
                     const existingAnnotations = await this.loadAnnotations(img.name, bitmap);
-                    const predictions = await ai.predict(bitmap);
+                    const predictions = await ai.detect(bitmap);
 
                     if (predictions.length > 0) {
                         let classesChanged = false;
                         const mapped = predictions.map(p => {
-                            const aiName = ai.cocoClasses[p.classId] || `class_${p.classId}`;
+                            const aiName = ai.rtdetrConfig.id2label[p.classId] || `class_${p.classId}`;
                             let projectClass = batchClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
-                            
+
                             if (!projectClass) {
                                 const newId = batchClasses.length > 0 ? Math.max(...batchClasses.map(c => c.id)) + 1 : 0;
                                 projectClass = { id: newId, name: aiName, color: YoloHelper.generateColor(newId) };
@@ -750,7 +1028,7 @@ class App {
                             }
                             return { ...p, classId: projectClass.id };
                         });
-                        
+
                         if (classesChanged) {
                             state.set({ classes: [...batchClasses] });
                             await this.saveClasses(batchClasses);
@@ -759,22 +1037,25 @@ class App {
                         const merged = [...existingAnnotations, ...mapped];
                         // Save without re-rendering sidebar (pass true to skip UI)
                         await this.saveAnnotations(idx, merged, bitmap, true);
-                        
+
                         if (idx === state.data.currentImageIndex) {
                             state.set({ annotations: merged });
                             if (this.canvasEngine) this.canvasEngine.draw();
                         }
                         img.status = 'labeled';
                     }
-                } catch (err) { 
-                    console.error(`Failed to auto-label ${img.name}:`, err); 
+                } catch (err) {
+                    console.error(`Failed to auto-label ${img.name}:`, err);
                 } finally {
                     completedCount++;
                     updateUI(img.name);
                 }
             }));
         }
-        overlay.remove();
+
+        modal.classList.add('hidden');
+        confirmBtn.disabled = false;
+        confirmBtn.classList.remove('opacity-50');
         state.set({ isAutoLabeling: false });
         this.renderImageList(images); // Final single refresh
         if (state.data.currentImageIndex !== -1) this.loadImage(state.data.currentImageIndex);
@@ -783,7 +1064,140 @@ class App {
 
     updateStatus(msg, isError = false) {
         this.dom.statusMessage.textContent = msg;
-        this.dom.statusMessage.style.color = isError ? 'var(--error)' : 'var(--text-muted)';
+        this.dom.statusMessage.style.color = isError ? '#ef4444' : 'var(--text-muted)';
+    }
+
+    // --- Magic Select (SAM) Helpers ---
+
+    resetMagicInteraction() {
+        state.set({ promptPoints: [], activeMask: null, activePromptBox: null });
+        this.canvasEngine.draw();
+    }
+
+    async confirmMagicMask() {
+        const { activeMask, classes, selectedClassId, currentTask } = state.data;
+        if (!activeMask) return;
+
+        const isSegTask = currentTask === 'segmentation';
+        let polygon = null;
+        let x1, y1, width, height;
+
+        if (isSegTask) {
+            // Precise contour tracing for segmentation
+            polygon = ContourTracer.trace(activeMask, state.data.currentImageBitmap.width, state.data.currentImageBitmap.height);
+            if (!polygon || polygon.length < 3) {
+                this.updateStatus('❌ Segment too small', true);
+                return;
+            }
+            const xs = polygon.map(p => p[0]);
+            const ys = polygon.map(p => p[1]);
+            x1 = Math.min(...xs);
+            y1 = Math.min(...ys);
+            width = Math.max(...xs) - x1;
+            height = Math.max(...ys) - y1;
+        } else {
+            // Tight bounding box for detection
+            const bounds = this.getMaskBounds(activeMask, state.data.currentImageBitmap.width);
+            if (!bounds) return;
+            ({ x: x1, y: y1, width, height } = bounds);
+        }
+
+        const newAnnotation = {
+            id: Date.now(),
+            classId: selectedClassId !== null ? selectedClassId : 0,
+            x: x1,
+            y: y1,
+            width: width,
+            height: height,
+            polygon: polygon,
+            score: 1.0
+        };
+
+        state.saveHistory();
+        const newAnnos = [...state.data.annotations, newAnnotation];
+        state.set({
+            annotations: newAnnos,
+            activeMask: null,
+            promptPoints: [],
+            activePromptBox: null
+        });
+
+        // saveAnnotations is now handled by the state subscriber for consistency
+        this.updateStatus(`✅ ${isSegTask ? 'Polygon' : 'Box'} confirmed`);
+    }
+
+    getMaskBounds(mask, imgWidth) {
+        let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+        let found = false;
+        for (let i = 0; i < mask.length; i++) {
+            if (mask[i] === 1) {
+                const x = i % imgWidth;
+                const y = Math.floor(i / imgWidth);
+                x1 = Math.min(x1, x);
+                y1 = Math.min(y1, y);
+                x2 = Math.max(x2, x);
+                y2 = Math.max(y2, y);
+                found = true;
+            }
+        }
+        return found ? { x: x1, y: y1, width: x2 - x1, height: y2 - y1 } : null;
+    }
+
+    updateTaskUI(task) {
+        const isDet = task === 'detection';
+        this.dom.btnTaskDet.classList.toggle('active-task-btn', isDet);
+        this.dom.btnTaskDet.classList.toggle('text-(--text-muted)', !isDet);
+        this.dom.btnTaskSeg.classList.toggle('active-task-btn', !isDet);
+        this.dom.btnTaskSeg.classList.toggle('text-(--text-muted)', isDet);
+
+        // Enable draw tool for both tasks (it will act as a box prompt in segmentation)
+        this.dom.btnDraw.disabled = false;
+        
+        // Auto-switch mode based on task for elite UX
+        if (isDet) {
+            state.set({ mode: 'draw' });
+        } else {
+            state.set({ mode: 'magic' });
+        }
+
+        this.updateStatus(`Task Switched: ${task.toUpperCase()}`);
+    }
+
+    maskToPolygon(mask, width, height) {
+        // Simplified Marching Squares or Contour tracing
+        // For simplicity, we'll use a crude version:
+        // Actually, we can use a small canvas trick to get contours via browser's path API if possible, 
+        // but better to just do a simple boundary trace.
+        // Given the time, I'll use a simple bounding box to polygon for now, 
+        // or a slightly better "hull" approach.
+        // RE-EVALUATION: The user wants "elite", let's do a basic but functional contour.
+
+        // Find a starting pixel
+        let startPixel = -1;
+        for (let i = 0; i < mask.length; i++) {
+            if (mask[i] === 1) {
+                startPixel = i;
+                break;
+            }
+        }
+        if (startPixel === -1) return null;
+
+        // For now, let's return a simple rectangle polygon to ensure the workflow is solid.
+        // Real contour tracing can be added in sam_utils.
+        const xs = [];
+        const ys = [];
+        for (let i = 0; i < mask.length; i++) {
+            if (mask[i] === 1) {
+                xs.push(i % width);
+                ys.push(Math.floor(i / width));
+            }
+        }
+        const x1 = Math.min(...xs);
+        const y1 = Math.min(...ys);
+        const x2 = Math.max(...xs);
+        const y2 = Math.max(...ys);
+
+        return [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
     }
 }
 

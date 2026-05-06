@@ -144,3 +144,10 @@ st-tool-button.active .tool-inner {
     font-size: 0.75rem;
     opacity: 0.8;
 }
+
+/* Task Switcher */
+.active-task-btn {
+    background: var(--accent);
+    color: var(--accent-text);
+    box-shadow: 0 2px 8px var(--accent-glow);
+}

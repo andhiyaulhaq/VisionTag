@@ -1,4 +1,5 @@
 import { state } from '../core/state.js';
+import { ai } from '../core/ai.js';
 
 /**
  * SharpTensor Canvas Engine
@@ -74,8 +75,13 @@ export class CanvasEngine {
         window.addEventListener('keyup', (e) => {
             if (e.code === 'Space') {
                 state.set({ isPanning: false });
-                this.canvas.style.cursor = state.data.mode === 'draw' ? 'crosshair' : 'default';
+                this.canvas.style.cursor = state.data.mode === 'draw' ? 'crosshair' : (state.data.mode === 'magic' ? 'crosshair' : 'default');
             }
+        });
+
+        // Prevent Context Menu on Canvas (for right-click prompts)
+        this.canvas.addEventListener('contextmenu', (e) => {
+            if (state.data.mode === 'magic') e.preventDefault();
         });
     }
 
@@ -90,6 +96,21 @@ export class CanvasEngine {
             this.interaction = { type: 'pan' };
             this.lastMousePos = { x: e.clientX, y: e.clientY };
             this.canvas.style.cursor = 'grabbing';
+            return;
+        }
+
+        // 2. Magic / Draw Interaction for Segmentation (Box prompt)
+        const isSegTask = state.data.currentTask === 'segmentation';
+        const isMagicOrSegDraw = state.data.mode === 'magic' || (state.data.mode === 'draw' && isSegTask);
+
+        if (isMagicOrSegDraw && state.data.currentImageBitmap) {
+            this.interaction = {
+                type: 'magic',
+                startImgPos: imgPos,
+                button: e.button,
+                isDrag: false
+            };
+            this.canvas.style.cursor = 'crosshair';
             return;
         }
 
@@ -163,6 +184,13 @@ export class CanvasEngine {
                 this.lastMousePos = { x: e.clientX, y: e.clientY };
                 return;
             }
+            if (this.interaction.type === 'magic') {
+                this.interaction.currentImgPos = imgPos;
+                const dist = Math.sqrt(Math.pow(imgPos.x - this.interaction.startImgPos.x, 2) + Math.pow(imgPos.y - this.interaction.startImgPos.y, 2));
+                if (dist > 5) {
+                    this.interaction.isDrag = true;
+                }
+            }
             this.handleInteraction(imgPos);
         } else {
             // Hover check
@@ -195,6 +223,9 @@ export class CanvasEngine {
 
     onMouseUp(e) {
         if (this.interaction) {
+            const { x, y } = this.getMousePos(e);
+            const imgPos = this.screenToImage(x, y);
+
             if (this.interaction.type === 'move' || this.interaction.type === 'resize') {
                 state.saveHistory();
             }
@@ -204,21 +235,34 @@ export class CanvasEngine {
                 const box = state.data.annotations.find(b => b.id === boxId);
                 
                 if (box) {
-                    // Prevent tiny "ghost" boxes from accidental clicks
                     if (box.width < 5 && box.height < 5) {
                         state.set({ 
                             annotations: state.data.annotations.filter(b => b.id !== boxId),
                             selectedBoxId: null
                         });
-                        return;
-                    }
-
-                    // If classes exist, show dropdown. Otherwise, show "New Class" modal.
-                    if (state.data.classes.length > 0) {
-                        this.showClassDropdown(boxId, e.clientX, e.clientY);
                     } else {
-                        window.dispatchEvent(new CustomEvent('request-new-class', { detail: { boxId } }));
+                        if (state.data.classes.length > 0) {
+                            this.showClassDropdown(boxId, e.clientX, e.clientY);
+                        } else {
+                            window.dispatchEvent(new CustomEvent('request-new-class', { detail: { boxId } }));
+                        }
                     }
+                }
+            }
+            
+            if (this.interaction.type === 'magic') {
+                const { startImgPos, isDrag, button } = this.interaction;
+                if (!isDrag) {
+                    const label = button === 0 ? 1 : (button === 2 ? 0 : null);
+                    if (label !== null) {
+                        this.handleMagicClick(startImgPos.x, startImgPos.y, label);
+                    }
+                } else {
+                    const x1 = Math.min(startImgPos.x, imgPos.x);
+                    const y1 = Math.min(startImgPos.y, imgPos.y);
+                    const x2 = Math.max(startImgPos.x, imgPos.x);
+                    const y2 = Math.max(startImgPos.y, imgPos.y);
+                    this.handleMagicBox(x1, y1, x2, y2);
                 }
             }
         }
@@ -287,6 +331,10 @@ export class CanvasEngine {
                     b.height = newHeight;
                 }
                 return b;
+            }
+            if (type === 'magic' && this.interaction.isDrag) {
+                // Just for visual feedback during draw
+                this.interaction.currentImgPos = imgPos;
             }
             return box;
         });
@@ -442,7 +490,100 @@ export class CanvasEngine {
         // 4. Draw Annotations
         this.drawAnnotations(annotations);
 
+        // 5. Draw SAM Active Mask and Points
+        this.drawSAMOverlay();
+
+        // 6. Draw Prompt Box (if dragging in magic mode)
+        this.drawPromptBox();
+
         this.ctx.restore();
+    }
+
+    drawPromptBox() {
+        if (this.interaction && this.interaction.type === 'magic' && this.interaction.isDrag) {
+            const { startImgPos, currentImgPos, button } = this.interaction;
+            if (!currentImgPos) return;
+            
+            const x = Math.min(startImgPos.x, currentImgPos.x);
+            const y = Math.min(startImgPos.y, currentImgPos.y);
+            const w = Math.abs(startImgPos.x - currentImgPos.x);
+            const h = Math.abs(startImgPos.y - currentImgPos.y);
+
+            const isExclude = button === 2;
+            const color = isExclude ? '#ef4444' : '#06b6d4';
+
+            this.ctx.save();
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 2 / state.data.zoom;
+            this.ctx.strokeRect(x, y, w, h);
+            
+            this.ctx.fillStyle = isExclude ? 'rgba(239, 68, 68, 0.15)' : 'rgba(6, 182, 212, 0.15)';
+            this.ctx.fillRect(x, y, w, h);
+            this.ctx.restore();
+        }
+    }
+
+    drawSAMOverlay() {
+        const { activeMask, promptPoints, zoom, currentImageBitmap } = state.data;
+        if (!currentImageBitmap) return;
+
+        // Draw active mask (Glassmorphic Cyan)
+        if (activeMask) {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = currentImageBitmap.width;
+            tempCanvas.height = currentImageBitmap.height;
+            const tctx = tempCanvas.getContext('2d');
+            const imgData = tctx.createImageData(tempCanvas.width, tempCanvas.height);
+            
+            for (let i = 0; i < activeMask.length; i++) {
+                if (activeMask[i] === 1) {
+                    imgData.data[i * 4] = 0;
+                    imgData.data[i * 4 + 1] = 255;
+                    imgData.data[i * 4 + 2] = 255;
+                    imgData.data[i * 4 + 3] = 100; // Alpha
+                }
+            }
+            tctx.putImageData(imgData, 0, 0);
+            this.ctx.drawImage(tempCanvas, 0, 0);
+        }
+
+        // Draw prompt points
+        promptPoints.forEach(p => {
+            this.ctx.beginPath();
+            this.ctx.fillStyle = p.label === 1 ? '#22c55e' : '#ef4444';
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 2 / zoom;
+            this.ctx.arc(p.x, p.y, 5 / zoom, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.stroke();
+        });
+    }
+
+    async handleMagicClick(x, y, label) {
+        const newPoints = [...state.data.promptPoints, { x, y, label }];
+        state.set({ promptPoints: newPoints });
+
+        const mask = await ai.predictSAMMask({
+            coords: newPoints.map(p => [p.x, p.y]),
+            labels: newPoints.map(p => p.label)
+        }, state.data.activePromptBox ? [state.data.activePromptBox] : null);
+
+        state.set({ activeMask: mask });
+    }
+
+    async handleMagicBox(x1, y1, x2, y2) {
+        const box = [x1, y1, x2, y2];
+        state.set({ activePromptBox: box });
+
+        const mask = await ai.predictSAMMask(
+            state.data.promptPoints.length > 0 ? {
+                coords: state.data.promptPoints.map(p => [p.x, p.y]),
+                labels: state.data.promptPoints.map(p => p.label)
+            } : null,
+            [box]
+        );
+
+        state.set({ activeMask: mask });
     }
 
     drawGrid(zoom, pan) {
@@ -477,14 +618,32 @@ export class CanvasEngine {
             this.ctx.save();
 
             // 1. Draw Box Body (Subtle fill)
-            this.ctx.fillStyle = isSelected ? `${color}33` : (isHovered ? `${color}11` : 'transparent');
-            this.ctx.fillRect(box.x, box.y, box.width, box.height);
-
-            // 2. Draw Border
+            // 2. Draw Polygon or Box Border
             this.ctx.strokeStyle = color;
             this.ctx.lineWidth = 2 / zoom;
 
-            this.ctx.strokeRect(box.x, box.y, box.width, box.height);
+            if (box.polygon) {
+                // Draw Polygon
+                this.ctx.beginPath();
+                this.ctx.moveTo(box.polygon[0][0], box.polygon[0][1]);
+                for (let i = 1; i < box.polygon.length; i++) {
+                    this.ctx.lineTo(box.polygon[i][0], box.polygon[i][1]);
+                }
+                this.ctx.closePath();
+                this.ctx.stroke();
+                
+                if (isSelected) {
+                    this.ctx.fillStyle = `${color}44`; // 0x44 = ~25% opacity
+                    this.ctx.fill();
+                }
+            } else {
+                // Standard Box
+                this.ctx.strokeRect(box.x, box.y, box.width, box.height);
+                if (isSelected) {
+                    this.ctx.fillStyle = `${color}44`;
+                    this.ctx.fillRect(box.x, box.y, box.width, box.height);
+                }
+            }
 
             // 3. Draw Handles (only for selected)
             if (isSelected) {

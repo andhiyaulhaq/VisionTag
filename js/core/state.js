@@ -8,6 +8,8 @@ export class AppState {
         this.data = {
             folderHandle: null,
             labelFolderHandle: null,
+            labelSegFolderHandle: null,
+            currentTask: 'detection', // 'detection' | 'segmentation'
             images: [], // { name, handle, status: 'pending'|'labeled' }
             currentImageIndex: -1,
             currentImageBitmap: null,
@@ -19,13 +21,20 @@ export class AppState {
             zoom: 1.0,
             pan: { x: 0, y: 0 },
             isPanning: false,
+            interactionMode: 'select', // 'select' | 'draw' | 'magic'
             loading: false,
 
             // AI State
-            aiModel: null, // { name, session }
+            aiModel: null, // { name }
             isAutoLabeling: false,
             autoLabelProgress: 0,
-            modelStatus: 'idle' // 'idle' | 'loading' | 'ready' | 'error'
+            modelStatus: 'idle', // 'idle' | 'loading' | 'ready' | 'error'
+            
+            // SAM Specific
+            activeMask: null,
+            promptPoints: [], // { x, y, label }
+            activePromptBox: null, // [x1, y1, x2, y2]
+            samLatency: { encoder: 0, decoder: 0 }
         };
         
         this.undoStack = [];

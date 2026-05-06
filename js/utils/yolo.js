@@ -17,22 +17,63 @@ export const YoloHelper = {
     },
 
     /**
+     * Convert polygon to normalized YOLO segmentation format
+     */
+    toYoloSeg(box, imgWidth, imgHeight) {
+        if (!box.polygon) return this.toYolo(box, imgWidth, imgHeight);
+        
+        const coords = box.polygon.map(([x, y]) => 
+            `${(x / imgWidth).toFixed(6)} ${(y / imgHeight).toFixed(6)}`
+        ).join(' ');
+        
+        return `${box.classId} ${coords}`;
+    },
+
+    /**
      * Parse a YOLO string back to pixel coordinates
      */
     fromYolo(line, imgWidth, imgHeight) {
         const parts = line.trim().split(/\s+/).map(Number);
-        if (parts.length !== 5) return null;
+        if (parts.length < 5) return null;
 
-        const [classId, xCenter, yCenter, width, height] = parts;
+        const classId = parts[0];
 
-        return {
-            id: Date.now() + Math.random(),
-            classId,
-            x: (xCenter - width / 2) * imgWidth,
-            y: (yCenter - height / 2) * imgHeight,
-            width: width * imgWidth,
-            height: height * imgHeight
-        };
+        if (parts.length === 5) {
+            // Standard Box
+            const [, xCenter, yCenter, width, height] = parts;
+            return {
+                id: Date.now() + Math.random(),
+                classId,
+                x: (xCenter - width / 2) * imgWidth,
+                y: (yCenter - height / 2) * imgHeight,
+                width: width * imgWidth,
+                height: height * imgHeight
+            };
+        } else {
+            // Polygon (Segmentation)
+            const coords = [];
+            for (let i = 1; i < parts.length; i += 2) {
+                coords.push([parts[i] * imgWidth, parts[i+1] * imgHeight]);
+            }
+            
+            // Calculate bounding box for the polygon
+            const xs = coords.map(p => p[0]);
+            const ys = coords.map(p => p[1]);
+            const x1 = Math.min(...xs);
+            const y1 = Math.min(...ys);
+            const x2 = Math.max(...xs);
+            const y2 = Math.max(...ys);
+
+            return {
+                id: Date.now() + Math.random(),
+                classId,
+                x: x1,
+                y: y1,
+                width: x2 - x1,
+                height: y2 - y1,
+                polygon: coords
+            };
+        }
     },
 
     /**
