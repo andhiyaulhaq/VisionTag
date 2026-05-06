@@ -54,8 +54,8 @@ export const YoloHelper = {
      */
     generateColor(id) {
         const colors = [
-            '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', '#ec4899',
-            '#06b6d4', '#f97316', '#14b8a6', '#6366f1', '#3b82f6'
+            '#E7F243', '#A5D8FF', '#FFD1DC', '#E0BBE4', '#BFFCC6',
+            '#FFCCAB', '#97E1D4', '#F3E5AB', '#D4F1F4', '#FFDFD3'
         ];
         return colors[id % colors.length];
     }

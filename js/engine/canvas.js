@@ -1,7 +1,7 @@
 import { state } from '../core/state.js';
 
 /**
- * VisionTag Canvas Engine
+ * SharpTensor Canvas Engine
  * Handles high-performance rendering and coordinate transformations.
  */
 export class CanvasEngine {
@@ -131,7 +131,7 @@ export class CanvasEngine {
                 y: startY,
                 width: 0,
                 height: 0,
-                classId: -1
+                classId: state.data.selectedClassId !== null ? state.data.selectedClassId : -1
             };
 
             state.saveHistory(); // Save state before adding new box
@@ -204,6 +204,15 @@ export class CanvasEngine {
                 const box = state.data.annotations.find(b => b.id === boxId);
                 
                 if (box) {
+                    // Prevent tiny "ghost" boxes from accidental clicks
+                    if (box.width < 5 && box.height < 5) {
+                        state.set({ 
+                            annotations: state.data.annotations.filter(b => b.id !== boxId),
+                            selectedBoxId: null
+                        });
+                        return;
+                    }
+
                     // If classes exist, show dropdown. Otherwise, show "New Class" modal.
                     if (state.data.classes.length > 0) {
                         this.showClassDropdown(boxId, e.clientX, e.clientY);
@@ -415,7 +424,7 @@ export class CanvasEngine {
         const { zoom, pan, currentImageBitmap, annotations } = state.data;
 
         // 1. Clear with Theme Background (using logical dimensions)
-        this.ctx.fillStyle = '#0f1115';
+        this.ctx.fillStyle = '#242C2E';
         this.ctx.fillRect(0, 0, this.logicalWidth, this.logicalHeight);
 
         // 2. Draw Subtle Grid
@@ -463,7 +472,7 @@ export class CanvasEngine {
             const isSelected = box.id === selectedBoxId;
             const isHovered = box.id === hoveredBoxId;
             const cls = classes.find(c => c.id === box.classId);
-            const color = cls ? cls.color : '#3b82f6';
+            const color = cls ? cls.color : '#E7F243';
 
             this.ctx.save();
 
@@ -474,11 +483,6 @@ export class CanvasEngine {
             // 2. Draw Border
             this.ctx.strokeStyle = color;
             this.ctx.lineWidth = 2 / zoom;
-
-            if (isSelected) {
-                this.ctx.shadowBlur = 10 / zoom;
-                this.ctx.shadowColor = color;
-            }
 
             this.ctx.strokeRect(box.x, box.y, box.width, box.height);
 
@@ -561,12 +565,16 @@ export class CanvasEngine {
         dropdown.style.left = `${clientX}px`;
         dropdown.style.top = `${clientY}px`;
 
+        const box = state.data.annotations.find(b => b.id === boxId);
+
         state.data.classes.forEach(cls => {
+            const isCurrent = cls.id === box?.classId;
             const item = document.createElement('div');
-            item.className = 'dropdown-item';
+            item.className = `dropdown-item ${isCurrent ? 'active' : ''}`;
             item.innerHTML = `
                 <span class="color-dot" style="background: ${cls.color}"></span>
                 <span class="class-name">${cls.name}</span>
+                ${isCurrent ? '<span class="check-icon">✓</span>' : ''}
             `;
             item.onclick = (e) => {
                 e.stopPropagation();

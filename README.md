@@ -1,6 +1,10 @@
-# VisionTag 🎯
+<p align="center">
+  <img src="public/st-logo-horizontal-long.png" alt="SharpTensor" width="800">
+</p>
 
-**VisionTag** is an elite, high-performance **Local-First Web Application** specifically designed for preparing image datasets for YOLO training. It bridges the gap between web flexibility and desktop performance, leveraging modern browser APIs to provide a seamless, secure, and lightning-fast labeling experience.
+# SharpTensor 🎯
+
+**SharpTensor** is an elite, high-performance **Local-First Web Application** specifically designed for preparing image datasets for YOLO training. It bridges the gap between web flexibility and desktop performance, leveraging modern browser APIs to provide a seamless, secure, and lightning-fast labeling experience.
 
 ![Version](https://img.shields.io/badge/version-0.1.0--alpha-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
@@ -8,9 +12,9 @@
 
 ---
 
-## 💎 The VisionTag Advantage
+## 💎 The SharpTensor Advantage
 
-Unlike traditional annotation tools, VisionTag runs entirely in your browser while maintaining direct access to your local files. 
+Unlike traditional annotation tools, SharpTensor runs entirely in your browser while maintaining direct access to your local files. 
 
 - **🚀 Zero-Latency Canvas**: 60FPS zooming and panning powered by a hardware-accelerated HTML5 Canvas engine.
 - **📁 Local-First Architecture**: Uses the modern `File System Access API` to read and write directly to your local folders. No uploads, no servers, no privacy concerns.
@@ -49,8 +53,8 @@ Unlike traditional annotation tools, VisionTag runs entirely in your browser whi
 ### Installation
 1. Clone the repository:
    ```bash
-   git clone https://github.com/andhiyaulhaq/VisionTag.git
-   cd VisionTag
+   git clone https://github.com/andhiyaulhaq/SharpTensor.git
+   cd SharpTensor
    ```
 2. Install dependencies:
    ```bash
@@ -68,7 +72,7 @@ Open your browser and navigate to the local URL provided by Vite.
 
 ## 🎹 Keyboard Shortcuts
 
-VisionTag is designed for high-speed, keyboard-driven labeling.
+SharpTensor is designed for high-speed, keyboard-driven labeling.
 
 | Key | Action |
 |-----|--------|

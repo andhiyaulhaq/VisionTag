@@ -8,7 +8,7 @@ import './components/index.js';
 
 
 /**
- * VisionTag Main Entry Point
+ * SharpTensor Main Entry Point
  */
 class App {
     constructor() {
@@ -22,7 +22,7 @@ class App {
         // Load default model
         ai.loadModel('/assets/model/yolov8n.onnx');
 
-        console.log('🚀 VisionTag Initialized');
+        console.log('🚀 SharpTensor Initialized');
     }
 
     initGlobalErrorHandling() {
@@ -496,7 +496,10 @@ class App {
         confirmBtn.classList.toggle('bg-red-600', isDanger);
         confirmBtn.classList.toggle('hover:bg-red-500', isDanger);
         confirmBtn.classList.toggle('shadow-[0_4px_12px_rgba(220,38,38,0.3)]', isDanger);
+        confirmBtn.classList.toggle('text-white', isDanger);
+        
         confirmBtn.classList.toggle('bg-(--accent)', !isDanger);
+        confirmBtn.classList.toggle('text-(--accent-text)', !isDanger);
         
         const card = modal.querySelector('.modal-card');
         card.classList.toggle('border-t-red-500', isDanger);
@@ -538,7 +541,7 @@ class App {
         const boxId = e.detail?.boxId;
         this.showModal({
             title: 'Initialize Workspace',
-            message: 'Welcome to VisionTag. To begin labeling, please define your primary object class. This will serve as the initial category for your dataset.',
+            message: 'Welcome to SharpTensor. To begin labeling, please define your primary object class. This will serve as the initial category for your dataset.',
             inputPlaceholder: 'e.g. Car, Dog, License Plate...',
             confirmText: 'Initialize Class',
             onConfirm: (name) => {
@@ -680,7 +683,7 @@ class App {
         }
         this.showModal({
             title: 'AI Batch Inference Confirmation',
-            message: '🤖 VISIONTAG AI: You are initiating a batch processing task. The current model will scan every image to automatically generate bounding boxes. Continue?',
+            message: '🤖 SHARPTENSOR AI: You are initiating a batch processing task. The current model will scan every image to automatically generate bounding boxes. Continue?',
             confirmText: 'Start AI Task',
             onConfirm: () => this.startAutoLabelBatch()
         });

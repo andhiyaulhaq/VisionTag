@@ -35,4 +35,4 @@ export class SidebarSection extends HTMLElement {
     }
 }
 
-customElements.define('vt-sidebar-section', SidebarSection);
+customElements.define('st-sidebar-section', SidebarSection);

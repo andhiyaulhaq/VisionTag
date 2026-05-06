@@ -1,5 +1,5 @@
 /**
- * VisionTag State Management
+ * SharpTensor State Management
  * Follows the Observer pattern for reactive UI updates.
  */
 

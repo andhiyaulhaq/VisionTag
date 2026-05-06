@@ -1,7 +1,7 @@
-# Product Requirements Document (PRD): VisionTag YOLO Annotator
+# Product Requirements Document (PRD): SharpTensor YOLO Annotator
 
 ## 1. Project Overview
-**VisionTag** is a high-performance, aesthetically premium image annotation tool specifically designed for preparing datasets for YOLO (You Only Look Once) object detection models. Unlike existing tools that often feel clunky or dated, VisionTag prioritizes developer experience (DX), speed, and visual clarity.
+**SharpTensor** is a high-performance, aesthetically premium image annotation tool specifically designed for preparing datasets for YOLO (You Only Look Once) object detection models. Unlike existing tools that often feel clunky or dated, SharpTensor prioritizes developer experience (DX), speed, and visual clarity.
 
 ### 1.1 Goal
 To provide a seamless workflow for ML engineers and data annotators to draw, label, and export bounding box data in the standardized YOLO format (`.txt` files with normalized coordinates).

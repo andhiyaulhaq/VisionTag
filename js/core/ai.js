@@ -4,7 +4,7 @@ import { state } from './state.js';
 const ort = globalThis.ort;
 
 /**
- * VisionTag AI Engine
+ * SharpTensor AI Engine
  * Handles YOLOv8/v11 inference via ONNX Runtime Web.
  */
 export class AIEngine {
