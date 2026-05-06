@@ -9,6 +9,12 @@
 ![Version](https://img.shields.io/badge/version-0.1.0--alpha-blue?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-AGPL--3.0-red?style=for-the-badge)
 ![Tech](https://img.shields.io/badge/tech-Vanilla%20JS%20%7C%20Vite-orange?style=for-the-badge)
+[![Demo](https://img.shields.io/badge/Live-Demo-brightgreen?style=for-the-badge&logo=cloudflare)](https://sharptensor.andhiyaulhaq.workers.dev/)
+
+---
+
+### [🚀 Try SharpTensor Live!](https://sharptensor.andhiyaulhaq.workers.dev/)
+
 
 ---
 
