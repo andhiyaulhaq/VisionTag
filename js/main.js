@@ -739,13 +739,16 @@ class App {
         }
     }
 
-    showModal({ title, message, inputPlaceholder = '', confirmText = 'Confirm', cancelText = 'Cancel', onConfirm, onCancel }) {
+    showModal({ title, message, inputPlaceholder = '', confirmText = 'Confirm', cancelText = 'Cancel', checkboxLabel = '', onConfirm, onCancel }) {
         const modal = this.dom.modal;
         modal.querySelector('.modal-title').textContent = title;
         modal.querySelector('.modal-message').textContent = message;
-
+        
         const input = modal.querySelector('.modal-input');
         const progressContainer = modal.querySelector('.modal-progress-container');
+        const checkboxContainer = modal.querySelector('.modal-checkbox-container');
+        const checkbox = modal.querySelector('.modal-checkbox');
+        const checkboxLabelEl = modal.querySelector('.modal-checkbox-label');
 
         if (inputPlaceholder) {
             input.classList.remove('hidden');
@@ -754,6 +757,16 @@ class App {
             setTimeout(() => input.focus(), 100);
         } else {
             input.classList.add('hidden');
+        }
+
+        if (checkboxLabel) {
+            checkboxContainer.classList.remove('hidden');
+            checkboxLabelEl.textContent = checkboxLabel;
+            checkbox.checked = false;
+            // Allow clicking the container to toggle the checkbox
+            checkboxContainer.onclick = () => checkbox.click();
+        } else {
+            checkboxContainer.classList.add('hidden');
         }
 
         if (progressContainer) progressContainer.classList.add('hidden');
@@ -786,8 +799,9 @@ class App {
 
         confirmBtn.onclick = () => {
             const val = input.value.trim();
+            const checked = checkbox.checked;
             modal.classList.add('hidden');
-            if (onConfirm) onConfirm(val);
+            if (onConfirm) onConfirm(val, checked);
         };
 
         cancelBtn.onclick = () => {
@@ -904,13 +918,14 @@ class App {
 
     async handleClearAllAnnotations() {
         this.showModal({
-            title: 'System Alert: Irreversible Deletion',
-            message: '🚨 CRITICAL: You are about to purge ALL annotation data from the current directory. Every label file will be deleted. This action is final and CANNOT be recovered. Proceed?',
-            confirmText: 'Purge All Data',
+            title: '☢️ NUCLEAR OPTION: Purge Dataset',
+            message: '🚨 CRITICAL: You are about to initiate a final purge of the current dataset. This will delete all annotation files. You can optionally reset your class definitions as well.',
+            confirmText: 'Execute Purge',
             cancelText: 'Abort',
-            onConfirm: async () => {
+            checkboxLabel: 'Also reset class definitions (classes.txt)',
+            onConfirm: async (val, clearClasses) => {
                 try {
-                    state.set({ loading: true, statusMessage: '🗑️ Clearing annotations...' });
+                    state.set({ loading: true, statusMessage: '🗑️ Purging data...' });
                     const { labelFolderHandle, images } = state.data;
 
                     // Iterate through all images and delete their corresponding .txt files
@@ -925,11 +940,24 @@ class App {
                     }
 
                     // Reset current view
-                    state.set({
+                    const resetState = {
                         annotations: [],
                         selectedBoxId: null,
                         loading: false
-                    });
+                    };
+
+                    if (clearClasses) {
+                        resetState.classes = [];
+                        resetState.selectedClassId = null;
+                        try {
+                            const classesFile = await state.data.folderHandle.getFileHandle('classes.txt');
+                            const writable = await classesFile.createWritable();
+                            await writable.write('');
+                            await writable.close();
+                        } catch (e) { }
+                    }
+
+                    state.set(resetState);
 
                     this.renderImageList(images);
                     if (this.canvasEngine) this.canvasEngine.draw();

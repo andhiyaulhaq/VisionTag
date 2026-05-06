@@ -39,6 +39,14 @@ export class AppModal extends HTMLElement {
                                 </div>
                                 <p class="modal-progress-text text-[0.75rem] text-(--text-muted) mt-3 font-mono text-center">0 / 0 images</p>
                             </div>
+
+                            <div class="modal-checkbox-container hidden mt-6 p-3 bg-black/20 rounded-xl border border-white/5 flex items-center justify-between gap-4 cursor-pointer group hover:border-white/10 transition-all">
+                                <span class="modal-checkbox-label text-[0.9rem] text-(--text-secondary) group-hover:text-(--text-primary) transition-all">Toggle option</span>
+                                <div class="relative w-11 h-6 bg-black/40 rounded-full border border-white/10 transition-all">
+                                    <input type="checkbox" class="modal-checkbox sr-only peer">
+                                    <div class="absolute left-1 top-1 w-4 h-4 bg-white/20 rounded-full transition-all peer-checked:translate-x-5 peer-checked:bg-(--accent) peer-checked:shadow-[0_0_10px_var(--accent-glow)]"></div>
+                                </div>
+                            </div>
                         </div>
                         <div class="modal-actions flex justify-end gap-3">
                             <button class="modal-cancel inline-flex items-center justify-center px-4 py-2 rounded-lg font-semibold bg-(--bg-card) border border-(--border) hover:bg-(--bg-hover) transition-all">Cancel</button>
