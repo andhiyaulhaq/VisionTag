@@ -206,12 +206,25 @@ export class AIEngine {
     }
 
     postprocessMask(data, dims, h, w) {
+        // SAM output is 256x256, representing the padded 1024x1024 space
         const maskSize = 256;
+        
+        // Calculate the actual size of the image within the 1024x1024 space
+        const longSide = Math.max(h, w);
+        const scale = 1024 / longSide;
+        const nh = h * scale;
+        const nw = w * scale;
+        
+        // Map those scaled dimensions to the 256x256 mask space
+        const maskW = (nw / 1024) * maskSize;
+        const maskH = (nh / 1024) * maskSize;
+
         const canvas = document.createElement('canvas');
         canvas.width = maskSize;
         canvas.height = maskSize;
         const ctx = canvas.getContext('2d');
         const imgData = ctx.createImageData(maskSize, maskSize);
+        
         for (let i = 0; i < data.length; i++) {
             const val = data[i] > 0 ? 255 : 0;
             imgData.data[i * 4] = val;
@@ -220,11 +233,16 @@ export class AIEngine {
             imgData.data[i * 4 + 3] = 255;
         }
         ctx.putImageData(imgData, 0, 0);
+
+        // Create the final mask by cropping the 'valid' region and upscaling it to original h, w
         const finalCanvas = document.createElement('canvas');
         finalCanvas.width = w;
         finalCanvas.height = h;
         const fctx = finalCanvas.getContext('2d');
-        fctx.drawImage(canvas, 0, 0, maskSize, maskSize, 0, 0, w, h);
+        
+        // fctx.drawImage(source, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
+        fctx.drawImage(canvas, 0, 0, maskW, maskH, 0, 0, w, h);
+        
         return fctx.getImageData(0, 0, w, h).data.filter((_, i) => i % 4 === 0).map(v => v > 128 ? 1 : 0);
     }
 }
