@@ -206,7 +206,8 @@ class App {
 
             if (data.currentTask !== oldData.currentTask) {
                 this.updateTaskUI(data.currentTask);
-                // Reload annotations for the new task without a full image reload
+                // Reload classes and annotations for the new isolated task
+                this.loadClasses();
                 this.syncTaskAnnotations();
             }
 
@@ -557,17 +558,32 @@ class App {
                 loading: false,
                 mode: 'select'
             });
-            this.updateStatus(`Loaded ${images.length} images`);
             this.renderImageList(images);
+            
+            // Initial class load
+            this.loadClasses();
         } catch (err) {
             console.error('Failed to open folder:', err);
             this.updateStatus('Access denied or folder empty', true);
         }
     }
 
-    async loadClasses(folderHandle) {
+    async loadClasses() {
+        const { folderHandle, labelFolderHandle, labelSegFolderHandle, currentTask } = state.data;
+        if (!folderHandle) return;
+
+        const targetFolder = currentTask === 'segmentation' ? labelSegFolderHandle : labelFolderHandle;
+        
         try {
-            const fileHandle = await folderHandle.getFileHandle('classes.txt');
+            let fileHandle;
+            try {
+                // 1. Try Isolated Class List (Task-Specific)
+                fileHandle = await targetFolder.getFileHandle('classes.txt');
+            } catch (e) {
+                // 2. Fallback to Root Class List (Legacy)
+                fileHandle = await folderHandle.getFileHandle('classes.txt');
+            }
+
             const file = await fileHandle.getFile();
             const content = await file.text();
             const classes = YoloHelper.parseClasses(content);
@@ -752,6 +768,23 @@ class App {
                 await writable.write(newLines.join('\n'));
                 await writable.close();
             } catch (e) { }
+        }
+    }
+
+    async saveClasses() {
+        const { labelFolderHandle, labelSegFolderHandle, currentTask, classes } = state.data;
+        const targetFolder = currentTask === 'segmentation' ? labelSegFolderHandle : labelFolderHandle;
+
+        if (targetFolder && classes.length > 0) {
+            try {
+                const fileHandle = await targetFolder.getFileHandle('classes.txt', { create: true });
+                const writable = await fileHandle.createWritable();
+                const content = classes.map(c => `${c.name} ${c.color}`).join('\n');
+                await writable.write(content);
+                await writable.close();
+            } catch (e) {
+                console.error('Failed to save classes:', e);
+            }
         }
     }
 
@@ -942,18 +975,22 @@ class App {
             onConfirm: async (val, clearClasses) => {
                 try {
                     state.set({ loading: true, statusMessage: '🗑️ Purging data...' });
-                    const { labelFolderHandle, images } = state.data;
+                    const { labelFolderHandle, labelSegFolderHandle, images, currentTask } = state.data;
+                    
+                    // Select the correct folder based on active task
+                    const targetFolder = currentTask === 'segmentation' ? labelSegFolderHandle : labelFolderHandle;
 
-                    // Iterate through all images and delete their corresponding .txt files
+                    // Iterate through all images and delete their corresponding .txt files in the target folder
                     for (const img of images) {
                         const txtName = img.name.replace(/\.[^/.]+$/, "") + ".txt";
                         try {
-                            await labelFolderHandle.removeEntry(txtName);
-                        } catch (e) {
-                            // File might not exist, ignore
-                        }
-                        img.status = 'pending';
+                            await targetFolder.removeEntry(txtName);
+                        } catch (e) { }
+                        img.status = 'pending'; // Reset sidebar status icon
                     }
+
+                    // Deep Purge: Clear the RAM cache to prevent "ghost" annotations from appearing
+                    this.imageCache.clear();
 
                     // Reset current view
                     const resetState = {
@@ -966,7 +1003,7 @@ class App {
                         resetState.classes = [];
                         resetState.selectedClassId = null;
                         try {
-                            const classesFile = await state.data.folderHandle.getFileHandle('classes.txt');
+                            const classesFile = await targetFolder.getFileHandle('classes.txt', { create: true });
                             const writable = await classesFile.createWritable();
                             await writable.write('');
                             await writable.close();
