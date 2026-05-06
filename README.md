@@ -7,7 +7,7 @@
 **SharpTensor** is an elite, high-performance **Local-First Web Application** specifically designed for preparing image datasets for YOLO training. It bridges the gap between web flexibility and desktop performance, leveraging modern browser APIs to provide a seamless, secure, and lightning-fast labeling experience.
 
 ![Version](https://img.shields.io/badge/version-0.1.0--alpha-blue?style=for-the-badge)
-![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)
+![License](https://img.shields.io/badge/license-AGPL--3.0-red?style=for-the-badge)
 ![Tech](https://img.shields.io/badge/tech-Vanilla%20JS%20%7C%20Vite-orange?style=for-the-badge)
 
 ---
@@ -16,6 +16,7 @@
 
 Unlike traditional annotation tools, SharpTensor runs entirely in your browser while maintaining direct access to your local files. 
 
+- **🚀 AI-Powered Efficiency**: Integrated **Ultralytics YOLOv8/v11** and **MobileSAM** for intelligent auto-labeling and interactive segmentation.
 - **🚀 Zero-Latency Canvas**: 60FPS zooming and panning powered by a hardware-accelerated HTML5 Canvas engine.
 - **📁 Local-First Architecture**: Uses the modern `File System Access API` to read and write directly to your local folders. No uploads, no servers, no privacy concerns.
 - **🏷️ Professional Workflow**: Features a "Draw-to-Define" initialization flow and quick class assignment to maximize labeling throughput.
@@ -27,6 +28,8 @@ Unlike traditional annotation tools, SharpTensor runs entirely in your browser w
 ## ✨ Key Features
 
 - **Advanced Explorer**: Real-time dataset navigation with visual labeling status indicators.
+- **AI Batch Processing**: Rapidly auto-label entire directories using standard COCO-80 pretrained models.
+- **Interactive Segmentation**: Use MobileSAM to generate pixel-perfect masks with single-click precision.
 - **YOLO Optimized**: Native support for `.txt` normalized coordinates and automatic `classes.txt` management.
 - **Global Migration Engine**: Intelligently handles class deletions by re-indexing your entire local dataset on-the-fly.
 - **Custom Modal System**: Glassmorphism-based interaction for class management and critical actions.
@@ -100,7 +103,18 @@ SharpTensor is designed for high-speed, keyboard-driven labeling.
 
 ## 📄 License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+Distributed under the **GNU Affero General Public License v3.0**. See `LICENSE` for more information. 
+
+> [!IMPORTANT]
+> This project utilizes pretrained models from **Ultralytics (YOLOv8/v11)** and **Meta AI (MobileSAM)**. Your use of these models must comply with their respective licenses.
+
+---
+
+## 🙏 Acknowledgements
+
+- **[Ultralytics YOLO](https://github.com/ultralytics/ultralytics)**: For providing state-of-the-art object detection models.
+- **[MobileSAM](https://github.com/ChaoningZhang/MobileSAM)**: For the high-speed, lightweight interactive segmentation engine.
+- **[ONNX Runtime Web](https://onnxruntime.ai/)**: For enabling high-performance AI inference directly in the browser.
 
 ---
 
