@@ -75,7 +75,8 @@ export class CanvasEngine {
         window.addEventListener('keyup', (e) => {
             if (e.code === 'Space') {
                 state.set({ isPanning: false });
-                this.canvas.style.cursor = state.data.mode === 'draw' ? 'crosshair' : (state.data.mode === 'magic' ? 'crosshair' : 'default');
+                const isDrawOrMagic = state.data.mode === 'draw' || state.data.mode === 'magic';
+                this.canvas.style.cursor = isDrawOrMagic ? 'crosshair' : 'default';
             }
         });
 
@@ -214,7 +215,8 @@ export class CanvasEngine {
                     this.canvas.style.cursor = 'move';
                 }
             } else {
-                this.canvas.style.cursor = (state.data.mode === 'draw' ? 'crosshair' : 'default');
+                const isDrawOrMagic = state.data.mode === 'draw' || state.data.mode === 'magic';
+                this.canvas.style.cursor = isDrawOrMagic ? 'crosshair' : 'default';
             }
         }
 
