@@ -13,14 +13,14 @@ export class AIEngine {
         this.samDecoderSession = null;
         this.promptEncoder = null;
         this.worker = null;
-        
+
         this.isLoaded = false;
         this.isWorkerReady = false;
-        
+
         // Context-specific state
         this.activeKey = null; // The image currently being processed for segmentation
         this.rtdetrConfig = null;
-        
+
         this.samTransform = new ResizeLongestSide(1024);
         this.embeddingCache = new Map(); // Key -> { embeddings, width, height }
         this.pendingCacheKeys = new Set();
@@ -37,7 +37,7 @@ export class AIEngine {
 
     handleWorkerMessage(e) {
         const { type, payload } = e.data;
-        
+
         if (type === 'initialized') {
             this.isWorkerReady = true;
             console.log('👷 AI Worker: Background engines ready');
@@ -49,12 +49,12 @@ export class AIEngine {
 
             // Store in the isolated cache
             const tensor = new ort.Tensor('float32', embeddings, dims);
-            
+
             // We need to know the original dimensions to store with the embeddings
             // These are retrieved from the pending task metadata or active state
             const metadata = this.embeddingCache.get(cacheKey) || {};
-            
-            this.embeddingCache.set(cacheKey, { 
+
+            this.embeddingCache.set(cacheKey, {
                 ...metadata,
                 embeddings: tensor
             });
@@ -63,7 +63,7 @@ export class AIEngine {
             if (cacheKey === this.activeKey) {
                 state.set({ modelStatus: 'ready' });
             }
-            
+
             // Maintenance: keep cache at 15
             if (this.embeddingCache.size > 15) {
                 const oldestKey = this.embeddingCache.keys().next().value;
@@ -103,17 +103,18 @@ export class AIEngine {
     async loadModels() {
         try {
             state.set({ modelStatus: 'loading' });
+            const modelUrl = '/models/yolov8n.onnx'; 
+            const modelType = 'yolov8';
+
             this.worker.postMessage({
                 type: 'init',
                 payload: { 
                     samUrl: '/models/mobilesam_encoder.onnx',
-                    rtdetrUrl: '/models/rtdetr.onnx'
+                    rtdetrUrl: modelUrl,
+                    modelType: modelType
                 }
             });
 
-            const configResp = await fetch('/models/rtdetr_config.json');
-            this.rtdetrConfig = await configResp.json();
-            
             const options = { executionProviders: ['wasm'], numThreads: self.navigator.hardwareConcurrency || 4 };
             this.samDecoderSession = await ort.InferenceSession.create('/models/mobilesam_decoder.onnx', options);
 
@@ -122,7 +123,7 @@ export class AIEngine {
             this.promptEncoder = new PromptEncoder(weights);
 
             this.isLoaded = true;
-            state.set({ 
+            state.set({
                 modelStatus: 'ready',
                 aiModel: { name: 'RT-DETR + MobileSAM (Worker Optimized)' }
             });
@@ -137,7 +138,7 @@ export class AIEngine {
     detect(bitmap) {
         if (!this.isLoaded) return Promise.resolve([]);
         const requestId = Math.random().toString(36).substr(2, 9);
-        
+
         return new Promise((resolve) => {
             this.pendingDetections.set(requestId, resolve);
             const canvas = document.createElement('canvas');
@@ -159,7 +160,7 @@ export class AIEngine {
      */
     async setSAMImage(bitmap, cacheKey) {
         if (!this.isLoaded || !cacheKey) return;
-        
+
         // 1. If we are setting the ACTIVE image, update the key
         const isActive = state.currentImage && state.currentImage.name === cacheKey;
         if (isActive) {
@@ -181,7 +182,7 @@ export class AIEngine {
         // 4. Register metadata (dims) before sending to worker
         this.embeddingCache.set(cacheKey, { width: bitmap.width, height: bitmap.height });
         this.pendingCacheKeys.add(cacheKey);
-        
+
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.width;
         canvas.height = bitmap.height;
@@ -191,7 +192,7 @@ export class AIEngine {
 
         const isPreload = !isActive;
         this.log(`${isPreload ? '💤 Warmup' : '🍳 Active'} encoding: ${cacheKey}...`);
-        
+
         if (isActive) {
             state.set({ modelStatus: 'processing' });
         }
@@ -207,13 +208,13 @@ export class AIEngine {
      */
     async predictSAMMask(points = null, boxes = null) {
         if (!this.activeKey || !this.embeddingCache.has(this.activeKey)) return null;
-        
+
         const entry = this.embeddingCache.get(this.activeKey);
         if (!entry.embeddings) return null;
 
         const start = performance.now();
         const origSize = [entry.height, entry.width];
-        
+
         let tp = null;
         if (points) tp = { coords: this.samTransform.applyCoords(points.coords, origSize), labels: points.labels };
         let tb = null;
@@ -225,7 +226,7 @@ export class AIEngine {
             sparse_embeddings: new ort.Tensor('float32', sparse, sparseDims),
             dense_embeddings: new ort.Tensor('float32', dense, denseDims)
         });
-        
+
         const maskOnnx = results[this.samDecoderSession.outputNames[0]];
         const mask = this.postprocessMask(maskOnnx.data, maskOnnx.dims, origSize[0], origSize[1]);
         return mask;
@@ -245,7 +246,7 @@ export class AIEngine {
         canvas.height = maskSize;
         const ctx = canvas.getContext('2d');
         const imgData = ctx.createImageData(maskSize, maskSize);
-        
+
         for (let i = 0; i < data.length; i++) {
             const val = data[i] > 0 ? 255 : 0;
             imgData.data[i * 4] = val;
@@ -260,7 +261,7 @@ export class AIEngine {
         finalCanvas.height = h;
         const fctx = finalCanvas.getContext('2d');
         fctx.drawImage(canvas, 0, 0, maskW, maskH, 0, 0, w, h);
-        
+
         return fctx.getImageData(0, 0, w, h).data.filter((_, i) => i % 4 === 0).map(v => v > 128 ? 1 : 0);
     }
 }

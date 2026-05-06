@@ -1104,8 +1104,11 @@ class App {
 
                     if (predictions.length > 0) {
                         let classesChanged = false;
+                        // Standard COCO 80 classes for model mapping
+                        const cocoNames = ["person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush"];
+
                         const mapped = predictions.map(p => {
-                            const aiName = ai.rtdetrConfig.id2label[p.classId] || `class_${p.classId}`;
+                            const aiName = cocoNames[p.classId] || `class_${p.classId}`;
                             let projectClass = batchClasses.find(c => c.name.toLowerCase() === aiName.toLowerCase());
 
                             if (!projectClass) {
@@ -1145,8 +1148,12 @@ class App {
         confirmBtn.disabled = false;
         confirmBtn.classList.remove('opacity-50');
         state.set({ isAutoLabeling: false });
-        this.renderImageList(images); // Final single refresh
-        if (state.data.currentImageIndex !== -1) this.loadImage(state.data.currentImageIndex);
+        
+        // Final deep refresh: update sidebar icons AND reload the active image annotations
+        this.renderImageList(state.data.images); 
+        if (state.data.currentImageIndex !== -1) {
+            await this.loadImage(state.data.currentImageIndex);
+        }
         this.updateStatus(cancelled ? '⚠️ AI Batch Cancelled' : '✅ AI Batch Complete');
     }
 
