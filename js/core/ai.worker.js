@@ -25,20 +25,28 @@ self.onmessage = async (event) => {
             // 1. Initialize SAM Encoder (Self-contained FP16)
             if (samUrl && !samEncoderSession) {
                 initTasks.push((async () => {
-                    samEncoderSession = await ort.InferenceSession.create(samUrl, {
-                        executionProviders: ['wasm'],
-                        numThreads
-                    });
+                    try {
+                        samEncoderSession = await ort.InferenceSession.create(samUrl, {
+                            executionProviders: ['wasm'],
+                            numThreads
+                        });
+                    } catch (e) {
+                        throw new Error(`SAM Encoder failed: ${e.message}`);
+                    }
                 })());
             }
 
             // 2. Initialize Detection Engine (RT-DETR or YOLOv8)
             if (rtdetrUrl && !detSession) {
                 initTasks.push((async () => {
-                    detSession = await ort.InferenceSession.create(rtdetrUrl, {
-                        executionProviders: ['wasm'],
-                        numThreads
-                    });
+                    try {
+                        detSession = await ort.InferenceSession.create(rtdetrUrl, {
+                            executionProviders: ['wasm'],
+                            numThreads
+                        });
+                    } catch (e) {
+                        throw new Error(`Detection Engine failed: ${e.message}`);
+                    }
                 })());
             }
 
