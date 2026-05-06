@@ -6,7 +6,7 @@ const ort = globalThis.ort;
 
 /**
  * SharpTensor AI Engine
- * Bridge class that delegates heavy AI tasks to Background Workers.
+ * Handles background model inference and embedding management.
  */
 export class AIEngine {
     constructor() {
@@ -16,12 +16,13 @@ export class AIEngine {
         
         this.isLoaded = false;
         this.isWorkerReady = false;
-        this.imageEmbeddings = null;
-        this.currentBitmap = null;
+        
+        // Context-specific state
+        this.activeKey = null; // The image currently being processed for segmentation
         this.rtdetrConfig = null;
         
         this.samTransform = new ResizeLongestSide(1024);
-        this.embeddingCache = new Map();
+        this.embeddingCache = new Map(); // Key -> { embeddings, width, height }
         this.pendingCacheKeys = new Set();
         this.pendingDetections = new Map(); // requestId -> resolve
 
@@ -46,18 +47,30 @@ export class AIEngine {
             const { embeddings, dims, cacheKey, latency } = payload;
             if (cacheKey) this.pendingCacheKeys.delete(cacheKey);
 
+            // Store in the isolated cache
             const tensor = new ort.Tensor('float32', embeddings, dims);
-            this.imageEmbeddings = tensor;
-            state.set({ modelStatus: 'ready' });
             
-            if (cacheKey) {
-                this.embeddingCache.set(cacheKey, { embeddings: tensor, bitmap: this.currentBitmap });
-                if (this.embeddingCache.size > 15) {
-                    const oldestKey = this.embeddingCache.keys().next().value;
-                    this.embeddingCache.delete(oldestKey);
-                }
+            // We need to know the original dimensions to store with the embeddings
+            // These are retrieved from the pending task metadata or active state
+            const metadata = this.embeddingCache.get(cacheKey) || {};
+            
+            this.embeddingCache.set(cacheKey, { 
+                ...metadata,
+                embeddings: tensor
+            });
+
+            // Update global state only if this is the ACTIVE image
+            if (cacheKey === this.activeKey) {
+                state.set({ modelStatus: 'ready' });
             }
-            this.log(`🖼️ ${cacheKey || 'Image'} encoded (${latency.toFixed(0)}ms)`);
+            
+            // Maintenance: keep cache at 15
+            if (this.embeddingCache.size > 15) {
+                const oldestKey = this.embeddingCache.keys().next().value;
+                this.embeddingCache.delete(oldestKey);
+            }
+
+            this.log(`🖼️ ${cacheKey} encoded (${latency.toFixed(0)}ms)`);
         }
 
         if (type === 'detected') {
@@ -87,14 +100,9 @@ export class AIEngine {
         window.dispatchEvent(event);
     }
 
-    /**
-     * Initialize background engines
-     */
     async loadModels() {
         try {
             state.set({ modelStatus: 'loading' });
-            
-            // 1. Send Init Command to Worker
             this.worker.postMessage({
                 type: 'init',
                 payload: { 
@@ -103,15 +111,12 @@ export class AIEngine {
                 }
             });
 
-            // 2. Load Metadata Config
             const configResp = await fetch('/models/rtdetr_config.json');
             this.rtdetrConfig = await configResp.json();
             
-            // 3. Load SAM Decoder (Remains on main thread for interactivity)
             const options = { executionProviders: ['wasm'], numThreads: self.navigator.hardwareConcurrency || 4 };
             this.samDecoderSession = await ort.InferenceSession.create('/models/mobilesam_decoder.onnx', options);
 
-            // 4. Load Prompt Encoder Weights
             const weightsResp = await fetch('/models/mobilesam_prompt_encoder_weights.json');
             const weights = await weightsResp.json();
             this.promptEncoder = new PromptEncoder(weights);
@@ -129,17 +134,12 @@ export class AIEngine {
         }
     }
 
-    /**
-     * Run background detection
-     */
     detect(bitmap) {
         if (!this.isLoaded) return Promise.resolve([]);
         const requestId = Math.random().toString(36).substr(2, 9);
         
         return new Promise((resolve) => {
             this.pendingDetections.set(requestId, resolve);
-            
-            // Capture image for worker
             const canvas = document.createElement('canvas');
             canvas.width = bitmap.width;
             canvas.height = bitmap.height;
@@ -154,18 +154,33 @@ export class AIEngine {
         });
     }
 
-    async setSAMImage(bitmap, cacheKey = null) {
-        if (!this.isLoaded) return;
-        if (cacheKey && this.pendingCacheKeys.has(cacheKey)) return;
+    /**
+     * Prepare SAM for a specific image (can be active or background warmup)
+     */
+    async setSAMImage(bitmap, cacheKey) {
+        if (!this.isLoaded || !cacheKey) return;
+        
+        // 1. If we are setting the ACTIVE image, update the key
+        const isActive = state.currentImage && state.currentImage.name === cacheKey;
+        if (isActive) {
+            this.activeKey = cacheKey;
+        }
 
-        if (cacheKey && this.embeddingCache.has(cacheKey)) {
+        // 2. Check if already in cache
+        if (this.embeddingCache.has(cacheKey)) {
             const entry = this.embeddingCache.get(cacheKey);
-            this.imageEmbeddings = entry.embeddings;
+            if (entry.embeddings && isActive) {
+                state.set({ modelStatus: 'ready' });
+            }
             return;
         }
 
-        this.currentBitmap = bitmap;
-        if (cacheKey) this.pendingCacheKeys.add(cacheKey);
+        // 3. Prevent redundant tasks
+        if (this.pendingCacheKeys.has(cacheKey)) return;
+
+        // 4. Register metadata (dims) before sending to worker
+        this.embeddingCache.set(cacheKey, { width: bitmap.width, height: bitmap.height });
+        this.pendingCacheKeys.add(cacheKey);
         
         const canvas = document.createElement('canvas');
         canvas.width = bitmap.width;
@@ -174,8 +189,12 @@ export class AIEngine {
         ctx.drawImage(bitmap, 0, 0);
         const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
 
-        this.log(`🍳 Background encoding: ${cacheKey || 'active image'}...`);
-        state.set({ modelStatus: 'processing' });
+        const isPreload = !isActive;
+        this.log(`${isPreload ? '💤 Warmup' : '🍳 Active'} encoding: ${cacheKey}...`);
+        
+        if (isActive) {
+            state.set({ modelStatus: 'processing' });
+        }
 
         this.worker.postMessage({
             type: 'encode',
@@ -183,10 +202,17 @@ export class AIEngine {
         }, [imageData.data.buffer]);
     }
 
+    /**
+     * Run prediction using the context-specific embeddings from cache
+     */
     async predictSAMMask(points = null, boxes = null) {
-        if (!this.imageEmbeddings || !this.promptEncoder) return null;
+        if (!this.activeKey || !this.embeddingCache.has(this.activeKey)) return null;
+        
+        const entry = this.embeddingCache.get(this.activeKey);
+        if (!entry.embeddings) return null;
+
         const start = performance.now();
-        const origSize = [this.currentBitmap.height, this.currentBitmap.width];
+        const origSize = [entry.height, entry.width];
         
         let tp = null;
         if (points) tp = { coords: this.samTransform.applyCoords(points.coords, origSize), labels: points.labels };
@@ -195,7 +221,7 @@ export class AIEngine {
 
         const { sparse, sparseDims, dense, denseDims } = this.promptEncoder.encode(tp, tb);
         const results = await this.samDecoderSession.run({
-            image_embeddings: this.imageEmbeddings,
+            image_embeddings: entry.embeddings,
             sparse_embeddings: new ort.Tensor('float32', sparse, sparseDims),
             dense_embeddings: new ort.Tensor('float32', dense, denseDims)
         });
@@ -206,16 +232,11 @@ export class AIEngine {
     }
 
     postprocessMask(data, dims, h, w) {
-        // SAM output is 256x256, representing the padded 1024x1024 space
         const maskSize = 256;
-        
-        // Calculate the actual size of the image within the 1024x1024 space
         const longSide = Math.max(h, w);
         const scale = 1024 / longSide;
         const nh = h * scale;
         const nw = w * scale;
-        
-        // Map those scaled dimensions to the 256x256 mask space
         const maskW = (nw / 1024) * maskSize;
         const maskH = (nh / 1024) * maskSize;
 
@@ -234,13 +255,10 @@ export class AIEngine {
         }
         ctx.putImageData(imgData, 0, 0);
 
-        // Create the final mask by cropping the 'valid' region and upscaling it to original h, w
         const finalCanvas = document.createElement('canvas');
         finalCanvas.width = w;
         finalCanvas.height = h;
         const fctx = finalCanvas.getContext('2d');
-        
-        // fctx.drawImage(source, sx, sy, sWidth, sHeight, dx, dy, dWidth, dHeight)
         fctx.drawImage(canvas, 0, 0, maskW, maskH, 0, 0, w, h);
         
         return fctx.getImageData(0, 0, w, h).data.filter((_, i) => i % 4 === 0).map(v => v > 128 ? 1 : 0);

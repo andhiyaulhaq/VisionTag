@@ -512,7 +512,7 @@ class App {
             state.set({ annotations: annotations || [] });
 
             if (currentTask === 'segmentation') {
-                setTimeout(() => ai.setSAMImage(currentImageBitmap, imageInfo.name), 50);
+                ai.setSAMImage(currentImageBitmap, imageInfo.name);
                 this.preloadNeighborhood(currentImageIndex); // Trigger neighborhood warmup immediately on task switch
             }
         } catch (err) {
