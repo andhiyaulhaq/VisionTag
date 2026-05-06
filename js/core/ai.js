@@ -3,6 +3,8 @@ import { ResizeLongestSide, PromptEncoder } from './sam_utils.js';
 
 // Use the global 'ort' from the script tag to ensure JS and WASM versions match perfectly
 const ort = globalThis.ort;
+ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/';
+
 
 /**
  * SharpTensor AI Engine
@@ -48,7 +50,8 @@ export class AIEngine {
             if (cacheKey) this.pendingCacheKeys.delete(cacheKey);
 
             // Store in the isolated cache
-            const tensor = new ort.Tensor('float32', embeddings, dims);
+            const tensor = new ort.Tensor('float16', embeddings, dims);
+
 
             // We need to know the original dimensions to store with the embeddings
             // These are retrieved from the pending task metadata or active state
@@ -116,8 +119,13 @@ export class AIEngine {
                 }
             });
 
-            const options = { executionProviders: ['wasm'], numThreads: self.navigator.hardwareConcurrency || 4 };
+            const options = { 
+                executionProviders: ['wasm'], 
+                numThreads: self.navigator.hardwareConcurrency || 4,
+                graphOptimizationLevel: 'basic'
+            };
             this.samDecoderSession = await ort.InferenceSession.create('/models/mobilesam_decoder_fp16.onnx', options);
+
 
             const weightsResp = await fetch('/models/mobilesam_prompt_encoder_weights_fp16.json');
             const weights = await weightsResp.json();
