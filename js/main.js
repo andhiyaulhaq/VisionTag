@@ -545,9 +545,17 @@ class App {
         try {
             const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
             state.set({ loading: true, statusMessage: 'Reading folder...' });
-            await this.loadClasses(handle);
+            
             const labelHandle = await handle.getDirectoryHandle('label', { create: true });
             const labelSegHandle = await handle.getDirectoryHandle('label-seg', { create: true });
+
+            state.set({
+                folderHandle: handle,
+                labelFolderHandle: labelHandle,
+                labelSegFolderHandle: labelSegHandle
+            });
+
+            await this.loadClasses();
 
             const images = [];
             for await (const entry of handle.values()) {
@@ -559,18 +567,12 @@ class App {
 
             this.imageCache.clear();
             state.set({
-                folderHandle: handle,
-                labelFolderHandle: labelHandle,
-                labelSegFolderHandle: labelSegHandle,
                 images,
                 currentImageIndex: images.length > 0 ? 0 : -1,
                 loading: false,
                 mode: 'select'
             });
             this.renderImageList(images);
-            
-            // Initial class load
-            this.loadClasses();
         } catch (err) {
             console.error('Failed to open folder:', err);
             this.updateStatus('Access denied or folder empty', true);
@@ -840,15 +842,17 @@ class App {
         }
     }
 
-    async saveClasses() {
-        const { labelFolderHandle, labelSegFolderHandle, currentTask, classes } = state.data;
+    async saveClasses(classesOverride = null) {
+        const { labelFolderHandle, labelSegFolderHandle, currentTask, classes: stateClasses } = state.data;
+        const classes = classesOverride || stateClasses;
         const targetFolder = currentTask === 'segmentation' ? labelSegFolderHandle : labelFolderHandle;
 
-        if (targetFolder && classes.length > 0) {
+        if (targetFolder && classes && classes.length > 0) {
             try {
                 const fileHandle = await targetFolder.getFileHandle('classes.txt', { create: true });
                 const writable = await fileHandle.createWritable();
-                const content = classes.map(c => `${c.name} ${c.color}`).join('\n');
+                // Standard YOLO format: just names
+                const content = classes.map(c => c.name).join('\n');
                 await writable.write(content);
                 await writable.close();
             } catch (e) {
@@ -962,16 +966,6 @@ class App {
         });
     }
 
-    async saveClasses(classes) {
-        if (!state.data.folderHandle) return;
-        try {
-            const content = classes.map(c => c.name).join('\n');
-            const fileHandle = await state.data.folderHandle.getFileHandle('classes.txt', { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(content);
-            await writable.close();
-        } catch (err) { console.error('Failed to save classes:', err); }
-    }
 
     updateImageSelection(index) {
         this.dom.imageList.querySelectorAll('.image-item').forEach((item, idx) => {
