@@ -1034,6 +1034,13 @@ class App {
 
         let completedCount = 0;
         const totalImages = images.length;
+        
+        // Pre-initialize UI with total count
+        requestAnimationFrame(() => {
+            text.textContent = `⚡ Preparing: Scanning ${totalImages} images...`;
+            fill.style.width = `0%`;
+        });
+
         let batchClasses = [...state.data.classes]; // Local sync for parallel tasks
 
         const updateUI = (imgName) => {
