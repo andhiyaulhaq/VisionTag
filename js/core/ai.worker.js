@@ -28,8 +28,10 @@ self.onmessage = async (event) => {
                     try {
                         samEncoderSession = await ort.InferenceSession.create(samUrl, {
                             executionProviders: ['wasm'],
-                            numThreads
+                            numThreads,
+                            graphOptimizationLevel: 'basic'
                         });
+
                     } catch (e) {
                         throw new Error(`SAM Encoder failed: ${e.message}`);
                     }

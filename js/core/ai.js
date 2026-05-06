@@ -3,7 +3,6 @@ import { ResizeLongestSide, PromptEncoder } from './sam_utils.js';
 
 // Use the global 'ort' from the script tag to ensure JS and WASM versions match perfectly
 const ort = globalThis.ort;
-ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/';
 
 
 /**
@@ -12,7 +11,11 @@ ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/di
  */
 export class AIEngine {
     constructor() {
+        if (globalThis.ort) {
+            ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/';
+        }
         this.samDecoderSession = null;
+
         this.promptEncoder = null;
         this.worker = null;
 
