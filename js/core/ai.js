@@ -103,22 +103,23 @@ export class AIEngine {
     async loadModels() {
         try {
             state.set({ modelStatus: 'loading' });
-            const modelUrl = '/models/yolov8n.onnx'; 
+            // Root-absolute paths ensure compatibility between Main Thread and Worker
+            const modelUrl = '/models/yolov8n_fp16.onnx'; 
             const modelType = 'yolov8';
 
             this.worker.postMessage({
                 type: 'init',
                 payload: { 
-                    samUrl: '/models/mobilesam_encoder.onnx',
+                    samUrl: '/models/mobilesam_encoder_fp16.onnx',
                     rtdetrUrl: modelUrl,
                     modelType: modelType
                 }
             });
 
             const options = { executionProviders: ['wasm'], numThreads: self.navigator.hardwareConcurrency || 4 };
-            this.samDecoderSession = await ort.InferenceSession.create('/models/mobilesam_decoder.onnx', options);
+            this.samDecoderSession = await ort.InferenceSession.create('/models/mobilesam_decoder_fp16.onnx', options);
 
-            const weightsResp = await fetch('/models/mobilesam_prompt_encoder_weights.json');
+            const weightsResp = await fetch('/models/mobilesam_prompt_encoder_weights_fp16.json');
             const weights = await weightsResp.json();
             this.promptEncoder = new PromptEncoder(weights);
 
@@ -221,10 +222,15 @@ export class AIEngine {
         if (boxes) tb = this.samTransform.applyBoxes(boxes, origSize);
 
         const { sparse, sparseDims, dense, denseDims } = this.promptEncoder.encode(tp, tb);
+        
+        // 🚀 FP16 Transition: Convert sparse and dense embeddings to Float16 bits
+        const sparseF16 = float32ToFloat16(sparse);
+        const denseF16 = float32ToFloat16(dense);
+
         const results = await this.samDecoderSession.run({
             image_embeddings: entry.embeddings,
-            sparse_embeddings: new ort.Tensor('float32', sparse, sparseDims),
-            dense_embeddings: new ort.Tensor('float32', dense, denseDims)
+            sparse_embeddings: new ort.Tensor('float16', sparseF16, sparseDims),
+            dense_embeddings: new ort.Tensor('float16', denseF16, denseDims)
         });
 
         const maskOnnx = results[this.samDecoderSession.outputNames[0]];
@@ -264,6 +270,62 @@ export class AIEngine {
 
         return fctx.getImageData(0, 0, w, h).data.filter((_, i) => i % 4 === 0).map(v => v > 128 ? 1 : 0);
     }
+}
+
+/**
+ * Utility: Convert Float32Array to Float16 (Uint16Array)
+ */
+function float32ToFloat16(float32Array) {
+    const float16Array = new Uint16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+        const val = float32Array[i];
+        let floatView = new Float32Array(1);
+        let int32View = new Int32Array(floatView.buffer);
+        floatView[0] = val;
+        let x = int32View[0];
+        let bits = (x >> 16) & 0x8000;
+        let m = (x >> 13) & 0x07ff;
+        let e = (x >> 23) & 0xff;
+        if (e === 0) {
+            bits |= (m >> 10);
+        } else if (e === 0xff) {
+            bits |= 0x7c00;
+            bits |= (m ? (m >> 10) || 1 : 0);
+        } else {
+            e = e - 127 + 15;
+            if (e >= 31) {
+                bits |= 0x7c00;
+            } else if (e <= 0) {
+                bits |= (m | 0x0800) >> (1 - e);
+            } else {
+                bits |= (e << 10) | (m >> 1);
+            }
+        }
+        float16Array[i] = bits;
+    }
+    return float16Array;
+}
+
+/**
+ * Utility: Convert Float16 (Uint16Array bits) back to Float32Array
+ */
+function float16ToFloat32(uint16Array) {
+    const float32Array = new Float32Array(uint16Array.length);
+    for (let i = 0; i < uint16Array.length; i++) {
+        const h = uint16Array[i];
+        const s = (h & 0x8000) >> 15;
+        const e = (h & 0x7C00) >> 10;
+        const f = h & 0x03FF;
+
+        if (e === 0) {
+            float32Array[i] = (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
+        } else if (e === 31) {
+            float32Array[i] = f ? NaN : ((s ? -1 : 1) * Infinity);
+        } else {
+            float32Array[i] = (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
+        }
+    }
+    return float32Array;
 }
 
 export const ai = new AIEngine();

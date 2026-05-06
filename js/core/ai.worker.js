@@ -2,10 +2,10 @@
  * SharpTensor AI Background Worker
  * Handles multi-model inference (RT-DETR & YOLOv8) and MobileSAM Encoding.
  */
-importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js');
+importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/ort.min.js');
 
 // Configure WASM paths
-ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
+ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.25.1/dist/';
 
 let samEncoderSession = null;
 let detSession = null;
@@ -22,17 +22,12 @@ self.onmessage = async (event) => {
 
             const initTasks = [];
 
-            // 1. Initialize SAM Encoder (with external data support)
+            // 1. Initialize SAM Encoder (Self-contained FP16)
             if (samUrl && !samEncoderSession) {
                 initTasks.push((async () => {
-                    const [modelBuf, dataBuf] = await Promise.all([
-                        fetch(samUrl).then(r => r.arrayBuffer()),
-                        fetch(samUrl + '.data').then(r => r.arrayBuffer())
-                    ]);
-                    samEncoderSession = await ort.InferenceSession.create(new Uint8Array(modelBuf), {
+                    samEncoderSession = await ort.InferenceSession.create(samUrl, {
                         executionProviders: ['wasm'],
-                        numThreads,
-                        externalData: [{ path: 'mobilesam_encoder.onnx.data', data: new Uint8Array(dataBuf) }]
+                        numThreads
                     });
                 })());
             }
@@ -122,6 +117,7 @@ self.onmessage = async (event) => {
 
 /**
  * Shared Preprocessing (HWC to CHW)
+ * Now supports Float16 for optimized models.
  */
 function preprocess(imageData, size, mean, std) {
     const floatData = new Float32Array(size * size * 3);
@@ -133,7 +129,47 @@ function preprocess(imageData, size, mean, std) {
         floatData[i + size * size * 2] = (data[i * 4 + 2] - mean[2]) / std[2];
     }
 
-    return new ort.Tensor('float32', floatData, [1, 3, size, size]);
+    // Convert Float32Array to Uint16Array (containing Float16 bits)
+    const float16Data = float32ToFloat16(floatData);
+    return new ort.Tensor('float16', float16Data, [1, 3, size, size]);
+}
+
+/**
+ * Utility: Convert Float32Array to Float16 (Uint16Array)
+ */
+function float32ToFloat16(float32Array) {
+    const float16Array = new Uint16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+        const val = float32Array[i];
+        
+        // Manual bit conversion (IEEE 754)
+        let floatView = new Float32Array(1);
+        let int32View = new Int32Array(floatView.buffer);
+        floatView[0] = val;
+        let x = int32View[0];
+        
+        let bits = (x >> 16) & 0x8000; // Get sign
+        let m = (x >> 13) & 0x07ff;    // Get mantissa
+        let e = (x >> 23) & 0xff;      // Get exponent
+
+        if (e === 0) {
+            bits |= (m >> 10);
+        } else if (e === 0xff) {
+            bits |= 0x7c00;
+            bits |= (m ? (m >> 10) || 1 : 0);
+        } else {
+            e = e - 127 + 15;
+            if (e >= 31) {
+                bits |= 0x7c00;
+            } else if (e <= 0) {
+                bits |= (m | 0x0800) >> (1 - e);
+            } else {
+                bits |= (e << 10) | (m >> 1);
+            }
+        }
+        float16Array[i] = bits;
+    }
+    return float16Array;
 }
 
 /**
