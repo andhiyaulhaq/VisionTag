@@ -418,8 +418,9 @@ class App {
     }
 
     async preloadNeighborhood(currentIndex) {
-        const range = 3; // Preload 3 images before and after
+        const range = 7; // Preload 7 images before and after (Total focus: 15)
         const { images } = state.data;
+        console.log(`🔍 Explorer: Triggering neighborhood warmup for index ${currentIndex} (range: ${range})`);
         
         for (let i = 1; i <= range; i++) {
             const nextIdx = currentIndex + i;
@@ -431,7 +432,15 @@ class App {
     }
 
     async preloadImage(index) {
-        if (this.imageCache.has(index)) return;
+        if (this.imageCache.has(index)) {
+            // Even if image is in cache, check if AI needs warmup
+            if (state.data.currentTask === 'segmentation') {
+                const imageInfo = state.data.images[index];
+                const cached = this.imageCache.get(index);
+                if (imageInfo && cached) ai.setSAMImage(cached.bitmap, imageInfo.name);
+            }
+            return;
+        }
         
         try {
             const imageInfo = state.data.images[index];
@@ -451,8 +460,14 @@ class App {
                 const oldestIndex = this.imageCache.keys().next().value;
                 this.imageCache.delete(oldestIndex);
             }
+
+            // AI Warmup: If in segmentation mode, trigger encoding in background
+            if (state.data.currentTask === 'segmentation') {
+                console.log(`🧠 Explorer: Warming up AI for neighbor: ${imageInfo.name}`);
+                ai.setSAMImage(bitmap, imageInfo.name);
+            }
         } catch (err) {
-            // Silently ignore pre-load failures (usually access or non-image files)
+            console.warn(`⚠️ Explorer: Preload failed for index ${index}:`, err);
         }
     }
 
@@ -498,6 +513,7 @@ class App {
 
             if (currentTask === 'segmentation') {
                 setTimeout(() => ai.setSAMImage(currentImageBitmap, imageInfo.name), 50);
+                this.preloadNeighborhood(currentImageIndex); // Trigger neighborhood warmup immediately on task switch
             }
         } catch (err) {
             console.error('Failed to sync task annotations:', err);
