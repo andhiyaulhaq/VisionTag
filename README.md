@@ -22,7 +22,7 @@
 
 Unlike traditional annotation tools, SharpTensor runs entirely in your browser while maintaining direct access to your local files. 
 
-- **🚀 AI-Powered Efficiency**: Integrated **Ultralytics YOLOv8/v11** and **MobileSAM** for intelligent auto-labeling and interactive segmentation.
+- **🚀 AI-Powered Efficiency**: Integrated **Ultralytics YOLOv8n** and **MobileSAM** for intelligent auto-labeling and interactive segmentation.
 - **🚀 Zero-Latency Canvas**: 60FPS zooming and panning powered by a hardware-accelerated HTML5 Canvas engine.
 - **📁 Local-First Architecture**: Uses the modern `File System Access API` to read and write directly to your local folders. No uploads, no servers, no privacy concerns.
 - **🏷️ Professional Workflow**: Features a "Draw-to-Define" initialization flow and quick class assignment to maximize labeling throughput.
@@ -112,7 +112,7 @@ SharpTensor is designed for high-speed, keyboard-driven labeling.
 Distributed under the **GNU Affero General Public License v3.0**. See `LICENSE` for more information. 
 
 > [!IMPORTANT]
-> This project utilizes pretrained models from **Ultralytics (YOLOv8/v11)** and **Meta AI (MobileSAM)**. Your use of these models must comply with their respective licenses.
+> This project utilizes pretrained models from **Ultralytics (YOLOv8n)** and **Meta AI (MobileSAM)**. Your use of these models must comply with their respective licenses.
 
 ---
 
